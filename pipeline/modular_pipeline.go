@@ -11,7 +11,7 @@ import (
 
 type Pipeline interface {
 	run_pipeline(string) chan string //article ids
-	parallel_run() chan string       //article ids
+	concurrent_run() chan string     //article ids
 }
 
 type OpinionatedPipeline struct {
@@ -46,18 +46,13 @@ func (op OpinionatedPipeline) run_pipeline(current string) chan string {
 
 /**
 
-Run Pipeline as a Pipeline
+Run Pipeline as a Pipeline (Still not finished, TODO FINISH THIS THING, THIS TEMPORARY SOLUTION DOESNT ACTUALLY WORK!!!!)
 
 */
 
-func (op OpinionatedPipeline) parallel_run() chan string {
+func (op OpinionatedPipeline) concurrent_run() chan string {
 
-	go func() {
-
-		curr := <-op.AOIs
-		op.run_pipeline(curr)
-
-	}()
+	go op.run_pipeline(<-op.AOIs)
 
 	return nil
 }
