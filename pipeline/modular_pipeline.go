@@ -54,7 +54,7 @@ func (op OpinionatedPipeline) parallel_run() chan string {
 
 	go func() {
 
-		curr := <-AOIs
+		curr := <-op.AOIs
 		op.run_pipeline(curr)
 
 	}()
