@@ -11,14 +11,13 @@ import (
 )
 
 type CustomAnalyzer interface {
-	Analyze(string, string) bool
+	Analyze(analyzer.Analyzable, chan analyzer.Analyzable) chan analyzer.Analyzable
 }
 
-type PipelineModule struct {
-	modID     string         //ID of current module (for log purposes)
-	AOI       string         //File name of Article Of Interest (AOI) in system
-	relatives chan string    //File names (FOR NOW, LATER DB IDS PLS) of relatives to AOI in system
-	analyzer  CustomAnalyzer //CustomAnalyzer object to run
+type Stage struct {
+	modID     string                   //ID of current module (for log purposes)
+	AOI       analyzer.Analyzable      //File name of Article Of Interest (AOI) in system
+	relatives chan analyzer.Analyzable //File names (FOR NOW, LATER DB IDS PLS) of relatives to AOI in system
+	analyzer  CustomAnalyzer           //CustomAnalyzer object to run
 
-	//Create with database link?/xml files link? !!!!LINK TO PREPROCESSED DATA!!!!
 }

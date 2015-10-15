@@ -10,24 +10,24 @@ import (
 )
 
 type Pipeline interface {
-	run_pipeline(string) chan string //article ids
-	concurrent_run() chan string     //article ids
+	run_pipeline(string) chan analyzer.Analyzable
+	concurrent_run() chan analyzer.Analyzable
 }
 
 type OpinionatedPipeline struct {
-	analysis_modules []PipelineModule
-	AOIs             chan string
+	analysis_modules []Stage
+	AOIs             chan analyzer.Analyzable
 	//DATABASE (temp xml) LINK HERE? !!!!!LINK TO PREPROCESSED DATA!!!!!
 }
 
 /**
 
-Runs Opinionated Pipeline
+Runs Opinionated Pipeline, ONE ARTICLE AT A TIME, TEMPORARY ONE AT A TIME SYSTEM
 
 */
-func (op OpinionatedPipeline) run_pipeline(current string) chan string {
+func (op OpinionatedPipeline) run_pipeline(current analyzer.Analyzable) chan analyzer.Analyzable {
 
-	var new_relatives chan string = nil
+	var new_relatives chan analyzer.Analyzable = nil
 
 	for index, module := range op.analysis_modules { //loop over each module
 
