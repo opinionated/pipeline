@@ -9,12 +9,6 @@ import (
 	"testing"
 )
 
-var simpleTaxonomySet = []string{
-	"thisIsWhatEscalationLooksLike",
-	"isValdimirPutinTryingToTeachTheWestALessonInSyria",
-	"alabamaPutsUpMoreHurdlesForVoters",
-}
-
 func TestFilterTaxonomys(t *testing.T) {
 	articles := make(chan analyzer.Analyzable)
 

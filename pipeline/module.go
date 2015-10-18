@@ -19,6 +19,9 @@ type Module interface {
 	// Gets any error currently in the stage and returns it
 	Close() error
 
+	// actually run the analysis
+	Analyze(chan analyzer.Analyzable, chan analyzer.Analyzable, chan bool)
+
 	SetInputChan(chan AnalyzableStory)
 	GetOutputChan() chan AnalyzableStory
 

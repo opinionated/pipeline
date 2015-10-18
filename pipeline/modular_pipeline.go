@@ -1,14 +1,10 @@
 package pipeline
 
 import (
-	"fmt"
-	"github.com/opinionated/analyzer-core/alchemy"
-	"github.com/opinionated/analyzer-core/analyzer"
-	"github.com/opinionated/pipeline/pipeline"
-	"os"
-	"testing"
+//	"github.com/opinionated/analyzer-core/analyzer"
 )
 
+/*
 type Pipeline interface {
 	run_pipeline(string) chan analyzer.Analyzable
 	concurrent_run() chan analyzer.Analyzable
@@ -20,11 +16,9 @@ type OpinionatedPipeline struct {
 	//DATABASE (temp xml) LINK HERE? !!!!!LINK TO PREPROCESSED DATA!!!!!
 }
 
-/**
 
-Runs Opinionated Pipeline, ONE ARTICLE AT A TIME, TEMPORARY ONE AT A TIME SYSTEM
+//Runs Opinionated Pipeline, ONE ARTICLE AT A TIME, TEMPORARY ONE AT A TIME SYSTEM
 
-*/
 func (op OpinionatedPipeline) run_pipeline(current analyzer.Analyzable) chan analyzer.Analyzable {
 
 	var new_relatives chan analyzer.Analyzable = nil
@@ -44,11 +38,9 @@ func (op OpinionatedPipeline) run_pipeline(current analyzer.Analyzable) chan ana
 
 }
 
-/**
 
-Run Pipeline as a Pipeline (Still not finished, TODO FINISH THIS THING, THIS TEMPORARY SOLUTION DOESNT ACTUALLY WORK!!!!)
+//Run Pipeline as a Pipeline (Still not finished, TODO FINISH THIS THING, THIS TEMPORARY SOLUTION DOESNT ACTUALLY WORK!!!!)
 
-*/
 
 func (op OpinionatedPipeline) concurrent_run() chan string {
 
@@ -56,3 +48,4 @@ func (op OpinionatedPipeline) concurrent_run() chan string {
 
 	return nil
 }
+*/
