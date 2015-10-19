@@ -1,0 +1,10 @@
+{
+	"inputSet":{
+		"main":"thisIsWhatEscalationLooksLike", 
+		"related":[
+						"isValdimirPutinTryingToTeachTheWestALessonInSyria",
+						"alabamaPutsUpMoreHurdlesForVoters"]
+	}, 
+	"output":["isValdimirPutinTryingToTeachTheWestALessonInSyria", "alabamaPutsUpMoreHurdlesForVoters"]
+}
+

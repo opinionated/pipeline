@@ -1,5 +1,17 @@
 import sys
 
+def main():
+    print "\n\twelcome to the pipeline module creator"
+    print "\tthis tool makes generating new pipe modules super duper easy"
+    print "\tto generate a module, just enter the module name"
+    print '\texample input: "taxonomy" would create a new module called "taxonomyModule"'
+    print '\tin the file "taxonomyModule.go"\n'
+    print '\tonce you are done generating the module, run go fmt __new file__ to make the code look pretty\n'
+    pipe_name = raw_input("enter pipe module name: ")
+
+    CreateSimplePipe(pipe_name)
+
+
 def CreateSimplePipe(name):
     fd = open(name + "Module.go", "w")
     
@@ -8,7 +20,12 @@ def CreateSimplePipe(name):
 
     WriteAnalyze(fd, name)
     WriteRun(fd, name)
-    
+    WriteSetup(fd, name)
+    WriteClose(fd, name)
+    WriteSetInputChan(fd, name)
+    WriteGetOutputChan(fd, name)
+    WriteSetErrorChan(fd, name)
+    WriteFooter(fd, name)
   
 def WriteAnalyze(fd, name):
     WriteFuncHeader(fd, name, 'Analyze',  'in chan analyzer.Analyzable,\n' +
@@ -120,6 +137,7 @@ def WriteRun(fd, name):
     '		// once you have a story, build the output and set the inc to nil\n'+
     "		// so that we don't get another story too soon\n"+
     '		inc = nil\n'+
+    '\n' +
     '		// build the output story\n'+
     '		ostory.MainArticle = istory.MainArticle\n'+
     '		ostory.RelatedArticles = make(chan analyzer.Analyzable)\n'+
@@ -129,68 +147,121 @@ def WriteRun(fd, name):
     '\n' +
     '	case outc <- ostory:\n'+
     '		// send the output story down the line\n'+
+    '\n' +
     '		// wait to start processing the next story until you can pass it down the line\n'+
     '		outc = nil\n'+
+    '\n' +
     '		// once we know we have someone to read, we can send down the line\n'+
     '		storyc = istory.RelatedArticles\n'+
+    '\n' +
     '		// set this up for the analyze function\n'+
     '		m.mainArticle = istory.MainArticle\n'+
+    '\n' +
     '	case next, isOpen := <-storyc:\n'+
     '		// read stories from upstream until stream closes\n'+
+    '\n' +
     "		storyc = nil // no mater what, don't go get the next article yet\n"+
+    '\n' +
     '		if !isOpen {\n'+
     "			// we are at the end of the current story's line\n"+
     '			// read on closed chan returns zero value (null in this case)\n'+
     "			// TODO: sync this with the analyze func so we don't write on closed stream\n"+
     '			close(ostory.RelatedArticles)\n'+
     '			ostory.RelatedArticles = nil\n'+
+    '\n' +
     '			// start looking for the next story in the stream\n'+
     '			inc = m.in\n'+
     '			break // get out of this if statement\n'+
     '		}\n'+
+    '\n' +
 '\n'+
     '		// send what we just read over to the analyzer\n'+
     '		freshArticle = next\n'+
     '		analyze = analyze_in\n'+
+    '\n' +
     '	case analyze <- freshArticle:\n'+
     '		// send the most recent article over to the analyzer\n'+
     '		analyze = nil\n'+
+    '\n' +
     '	case processedArticle = <-analyze_out:\n'+
     '		// read the result from the analyzer\n'+
     '		results = ostory.RelatedArticles\n'+
+    '\n' +
     '	case results <- processedArticle:\n'+
     '		// write the article to the next stage\n'+
     '		results = nil\n'+
+    '\n' +
     '		// read the next article in\n'+
     '		storyc = istory.RelatedArticles\n'+
+    '\n' +
     '	case errc := <-m.closing:\n'+
     '		// send the error back\n'+
+    '\n' +
     '		// close anything open\n'+
     '		m.in = nil\n'+
     '		close(m.err)\n'+
     '		close(m.closing)\n'+
     '		close(m.out)\n'+
+    '\n' +
     '		// close the chans we created\n'+
     '		close(analyze_in)\n'+
     '		if ostory.RelatedArticles != nil {\n'+
     '			close(ostory.RelatedArticles)\n'+
     '		}\n'+
+    '\n' +
     '		finishAnalyzer <- true\n'+
     '		close(finishAnalyzer)\n'+
+    '\n' +
     '		errc <- err\n'+
+    '\n' +
     '		return\n'+
+    '\n' +
     '	case bigErr := <-m.err:\n'+
     '		// what to do when a big error comes along\n'+
     '		// propogate and return\n'+
     '		m.err <- bigErr\n'+
     '		err = bigErr\n'+
+    '\n' +
     '		// ignore any values that will come down the line\n'+
     '		// TODO: make all these nil\n'+
     '		m.in = nil\n'+
+    '\n' +
     '	}\n'+
     '}\n')
-    fd.write('}\n')
+    fd.write('}\n\n')
 
+
+def WriteSetup(fd, name):
+    WriteFuncHeader(fd, name, 'Setup', '')
+    fd.write('m.out = make(chan AnalyzableStory, 1)\n')
+    fd.write('m.closing = make(chan chan error)\n')
+    fd.write('}\n\n')
+
+def WriteClose(fd, name):
+    fd.write('func (m *' + name + 'Module) Close() error {\n')
+    fd.write('errc := make(chan error)\n')
+    fd.write('m.closing <- errc\n')
+    fd.write('return <-errc\n')
+    fd.write('}\n\n')
+
+def WriteSetInputChan(fd, name):
+    WriteFuncHeader(fd, name, 'SetInputChan', 'inc chan AnalyzableStory')
+    fd.write('m.in = inc\n')
+    fd.write('}\n\n')
+
+def WriteGetOutputChan(fd, name):
+    fd.write('func (m *' + name + 'Module) GetOutputChan() chan AnalyzableStory {\n')
+    fd.write('return m.out\n')
+    fd.write('}\n\n')
+
+def WriteSetErrorChan(fd, name):
+    WriteFuncHeader(fd, name, 'SetErrorPropogateChan', 'errc chan error')
+    fd.write('m.err = errc\n')
+    fd.write('}\n\n')
+
+def WriteFooter(fd, name):
+    fd.write('// check that the module was compiled properly\n')
+    fd.write('var _ Module = (*' + name + 'Module)(nil)\n')
 def WriteHeader(fd, name):
     fd.write('package pipeline\n')
     fd.write('import (\n"github.com/opinionated/analyzer-core/analyzer"\n)\n')
@@ -209,17 +280,6 @@ def WriteStruct(fd, name):
 def WriteFuncHeader(fd, name, func, params):
     fd.write('func (m *' + name + 'Module) ' + func + '(' + params + ') {\n')
 
-def main():
-    print "welcome to the pipeline module utility"
-    print "use is to make generating new pipe modules super duper easy"
-    print "to generate a module, just enter the module name"
-    print 'example input: "taxonomy" would create a new module called "taxonomyModule"'
-    print 'in the file "taxonomyModule.go"'
-    pipe_name = raw_input("enter pipe module name: ")
-
-    CreateSimplePipe(pipe_name)
-
 if __name__ == '__main__':
     main()
-
 

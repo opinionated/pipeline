@@ -2,93 +2,139 @@ package pipeline_test
 
 import (
 	"fmt"
-	"github.com/opinionated/analyzer-core/alchemy"
 	"github.com/opinionated/analyzer-core/analyzer"
 	"github.com/opinionated/pipeline/pipeline"
+	"github.com/opinionated/utils/config"
 	"os"
 	"testing"
 )
 
-func TestFilterTaxonomys(t *testing.T) {
-	articles := make(chan analyzer.Analyzable)
+// functions to help with testing
 
-	go func() {
-		for i := 1; i < len(simpleTaxonomySet); i++ {
-			article := analyzer.BuildAnalyzable()
-			article.FileName = "testData/simpleTaxonomy/" + simpleTaxonomySet[i]
-			article.Name = simpleTaxonomySet[i]
-			articles <- article
-		}
-		close(articles)
-	}()
+func BuildStoryFromFile(name, file string) pipeline.AnalyzableStory {
+	f, err := os.Open(file)
+	defer f.Close()
 
-	top := analyzer.BuildAnalyzable()
-	top.FileName = "testData/simpleTaxonomy/" + simpleTaxonomySet[0]
-	file, err := os.Open(top.FileName + "_taxonomy.xml")
 	if err != nil {
 		panic(err)
 	}
 
-	err = alchemy.ToXML(file, &top.Taxonomys)
+	config.InitConfig()
+	err = config.ReadFile(name, f)
+
 	if err != nil {
 		panic(err)
 	}
 
-	filtered := pipeline.FilterTaxonomy(top, articles)
-	found := <-filtered
-	if found.Name != simpleTaxonomySet[1] {
-		t.Errorf("expected article:", simpleTaxonomySet[1], "got:", found.Name)
+	story := pipeline.AnalyzableStory{}
+	story.MainArticle = analyzer.Analyzable{}
+	story.MainArticle.Name = "main"
+	_, ok := config.From(name).Nested("inputSet").GetArray("related")
+	if !ok {
+		panic("could not convert to array")
+
 	}
+
+	return story
 }
 
-func TestLoadTaxonomys(t *testing.T) {
-	articles := make(chan analyzer.Analyzable)
-	withTaxonomy := pipeline.LoadTaxonomy(articles)
+// manages testing of a story, given the input and expected output
+// load the story you want it to drive, then build it from the file
+func StoryDriver(t *testing.T, inc chan pipeline.AnalyzableStory, output chan pipeline.AnalyzableStory, name string, done chan bool) {
 
+	// build the story to send down the pipe
+	story := pipeline.AnalyzableStory{}
+	story.RelatedArticles = make(chan analyzer.Analyzable)
+
+	// send it down k
+	inc <- story
+
+	// go feed the stories into the pipe
 	go func() {
-		for _, link := range simpleTaxonomySet {
-			article := analyzer.BuildAnalyzable()
-			article.FileName = "testData/simpleTaxonomy/" + link
-			articles <- article
+		// build the inputs
+		input := config.From(name).Nested("inputSet")
+		arr, ok := input.GetArray("related")
+
+		if !ok {
+			panic("could not convert input to array")
 		}
-		close(articles)
+
+		for _, link := range arr {
+			related := analyzer.Analyzable{}
+			str, ok := link.(string)
+			if !ok {
+				panic("error, could not convert type!")
+			}
+			related.Name = str
+			fmt.Println("sending:", related.Name)
+			story.RelatedArticles <- related
+		}
+		defer close(story.RelatedArticles)
 	}()
 
-	for i := 0; i < len(simpleTaxonomySet); i++ {
-		analyzable := <-withTaxonomy
-		fmt.Println("analyzable:", analyzable)
-	}
+	// read the actual ouput and compare it to the expected
+	quit := make(chan bool)
+	go func() {
+		ostory := <-output
+		arr, ok := config.From(name).GetArray("output")
+
+		if !ok {
+			panic("could not convert output to array")
+		}
+
+		i := 0 // count along with expected
+
+		for article := range ostory.RelatedArticles {
+			if i > len(arr) {
+				// make sure it doesn't go out of range
+				t.Errorf("unexpected output for set %s: article %s is beyond test set",
+					name,
+					article.Name)
+			}
+
+			fmt.Println("from pipe:", article.Name)
+			// convert arr to str
+			str, ok := arr[i].(string)
+			if !ok {
+				panic("error, could not convert output to string")
+			}
+
+			if article.Name != str {
+				// compare expected and actual sets
+				t.Errorf("unexpected output for set %s: expected %s but got %s",
+					name,
+					str,
+					article.Name)
+			}
+
+			i++
+		}
+		// finish up
+		quit <- true
+	}()
+
+	<-quit
+
+	fmt.Println("all done")
+	done <- true
 }
 
-func TestBuildData(t *testing.T) {
-	t.Skip("only run this when you need to set up a new set")
-	// build a test set
-	articles := simpleTaxonomySet
-	path := "testData/simpleTaxonomy/"
-	for _, link := range articles {
-		article, err := alchemy.ParseArticle(path + link + ".txt")
-		if err != nil {
-			panic(err)
-		}
+func TestBuildStory(t *testing.T) {
+	// TODO: move this over to taxonomy
+	BuildStoryFromFile("test", "testSets/testPipe.json")
 
-		keywords := alchemy.Keywords{}
-		err = alchemy.GetKeywords(article, &keywords)
-		if err != nil {
-			panic(err)
-		}
-		err = alchemy.MarshalToFile(path+link+"_keywords.xml", keywords)
-		if err != nil {
-			panic(err)
-		}
+	pipe := pipeline.TaxonomyModule{}
+	pipe.Setup()
 
-		taxonomy := alchemy.Taxonomys{}
-		err = alchemy.GetTaxonomy(article, &taxonomy)
-		if err != nil {
-			panic(err)
-		}
-		err = alchemy.MarshalToFile(path+link+"_taxonomy.xml", taxonomy)
-		if err != nil {
-			panic(err)
-		}
-	}
+	inc := make(chan pipeline.AnalyzableStory)
+	pipe.SetInputChan(inc)
+	pipe.SetErrorPropogateChan(make(chan error))
+	go pipe.Run()
+
+	done := make(chan bool)
+
+	go StoryDriver(t, inc, pipe.GetOutputChan(), "test", done)
+
+	<-done
+	pipe.Close()
 }
