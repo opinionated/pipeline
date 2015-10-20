@@ -1,6 +1,15 @@
 import sys
 
+####################################################
+"""
+    NOTE: NEED TO REWORK THIS TO MAKE IT MORE REUSABLE
+
+"""
+####################################################
+
 def main():
+    print "\n\nBROKEN FOR NOW\n\n"
+
     print "\n\twelcome to the pipeline module creator"
     print "\tthis tool makes generating new pipe modules super duper easy"
     print "\tto generate a module, just enter the module name"
@@ -8,8 +17,8 @@ def main():
     print '\tin the file "taxonomyModule.go"\n'
     print '\tonce you are done generating the module, run go fmt __new file__ to make the code look pretty\n'
     pipe_name = raw_input("enter pipe module name: ")
-
-    CreateSimplePipe(pipe_name)
+    
+    ##CreateSimplePipe(pipe_name)
 
 
 def CreateSimplePipe(name):

@@ -40,7 +40,8 @@ func RunPipeFull(quit chan bool) {
 	errc := make(chan error)
 	module.SetErrorPropogateChan(errc)
 	// send story to module
-	go module.Run()
+	go pipeline.Run(&module)
+
 	i <- story
 	close(i)
 	ostr := <-module.GetOutputChan()
@@ -78,7 +79,7 @@ func BenchmarkModularPipeline(b *testing.B) {
 	errc := make(chan error)
 	module.SetErrorPropogateChan(errc)
 	// send story to module
-	go module.Run()
+	go pipeline.Run(&module)
 	i <- story
 	close(i)
 

@@ -129,7 +129,7 @@ func TestBuildStory(t *testing.T) {
 	inc := make(chan pipeline.AnalyzableStory)
 	pipe.SetInputChan(inc)
 	pipe.SetErrorPropogateChan(make(chan error))
-	go pipe.Run()
+	go pipeline.Run(&pipe)
 
 	done := make(chan bool)
 
