@@ -13,8 +13,8 @@ var simpleTaxonomySet = []string{
 	"alabamaPutsUpMoreHurdlesForVoters",
 }
 
-func buildStory(name string, output chan analyzer.Analyzable) pipeline.AnalyzableStory {
-	story := pipeline.AnalyzableStory{}
+func buildStory(name string, output chan analyzer.Analyzable) pipeline.Story {
+	story := pipeline.Story{}
 
 	mainArticle := analyzer.Analyzable{}
 	mainArticle.Name = "main"
@@ -34,7 +34,7 @@ func RunPipeFull(quit chan bool) {
 	module := pipeline.TaxonomyModule{}
 	module.Setup()
 
-	i := make(chan pipeline.AnalyzableStory)
+	i := make(chan pipeline.Story)
 	module.SetInputChan(i)
 
 	errc := make(chan error)
@@ -73,7 +73,7 @@ func BenchmarkModularPipeline(b *testing.B) {
 	module := pipeline.TaxonomyModule{}
 	module.Setup()
 
-	i := make(chan pipeline.AnalyzableStory)
+	i := make(chan pipeline.Story)
 	module.SetInputChan(i)
 
 	errc := make(chan error)

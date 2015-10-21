@@ -6,8 +6,8 @@ import (
 )
 
 type TaxonomyModule struct {
-	in  chan AnalyzableStory
-	out chan AnalyzableStory
+	in  chan Story
+	out chan Story
 
 	err     chan error
 	closing chan chan error
@@ -15,19 +15,20 @@ type TaxonomyModule struct {
 	mainArticle analyzer.Analyzable
 }
 
-func (m *TaxonomyModule) Analyze(main, related analyzer.Analyzable) analyzer.Analyzable {
+func (m *TaxonomyModule) Analyze(main analyzer.Analyzable,
+	related *analyzer.Analyzable) (error, bool) {
+
 	if main.Name == " " {
 		fmt.Println("empty name")
-		return related
+		return nil, true
 	}
 
 	// TODO: put taxonomy analyze code in here
-
-	return related
+	return nil, true
 }
 
 func (m *TaxonomyModule) Setup() {
-	m.out = make(chan AnalyzableStory)
+	m.out = make(chan Story)
 	m.closing = make(chan chan error)
 }
 
@@ -37,11 +38,11 @@ func (m *TaxonomyModule) Close() error {
 	return <-errc
 }
 
-func (m *TaxonomyModule) SetInputChan(inc chan AnalyzableStory) {
+func (m *TaxonomyModule) SetInputChan(inc chan Story) {
 	m.in = inc
 }
 
-func (m *TaxonomyModule) GetOutputChan() chan AnalyzableStory {
+func (m *TaxonomyModule) GetOutputChan() chan Story {
 	return m.out
 }
 
@@ -53,7 +54,7 @@ func (m *TaxonomyModule) getErrorPropogateChan() chan error {
 	return m.err
 }
 
-func (m *TaxonomyModule) getInputChan() chan AnalyzableStory {
+func (m *TaxonomyModule) getInputChan() chan Story {
 	return m.in
 }
 

@@ -5,194 +5,202 @@ import (
 	"github.com/opinionated/analyzer-core/analyzer"
 )
 
-// Type send through the pipeline
-type AnalyzableStory struct {
+// type send through the pipeline
+type Story struct {
 	MainArticle     analyzer.Analyzable
 	RelatedArticles chan analyzer.Analyzable
 }
 
+// a stage in the pipeline
+// the important thing here is to override the Analyze function with
+// your own analyze code
 type Module interface {
-
-	// Do any stage setup
 	Setup()
 
-	// all your code goes here
-	Analyze(analyzer.Analyzable, analyzer.Analyzable) analyzer.Analyzable
+	// compare one related article to the main article
+	// return the related article
+	// TODO: change the signature here, maybe think about making this
+	// return err, useAgain and moding the analyzable by reference
+	Analyze(analyzer.Analyzable, *analyzer.Analyzable) (error, bool)
 
 	// up to each module to make sure the close happens properly
 	Close() error
 
 	// story stream accessors
-	SetInputChan(chan AnalyzableStory)
-	getInputChan() chan AnalyzableStory
+	SetInputChan(chan Story)
+	getInputChan() chan Story
 
-	GetOutputChan() chan AnalyzableStory
+	GetOutputChan() chan Story
 
 	// gets the closing stream
 	getClose() chan chan error
 
 	// for significant errors
+	// talked to by the pipeline manager
 	SetErrorPropogateChan(chan error)
 	getErrorPropogateChan() chan error
 }
 
 // manages input stream for a module
 // calls the module's Analyze function
-// pass the module in by reference (check if we actually need to)
+// pass the module in by reference
 func Run(m Module) {
 
 	// dummy error for now
+	// TODO: decide if we want/need this
 	var err error
 
 	// tmp chans for story in/out stream
-	inc := m.getInputChan()
-	var outc chan AnalyzableStory
+	inputStream := m.getInputChan()
+	var outputStream chan Story
 
-	var istory AnalyzableStory          // input story
-	var storyc chan analyzer.Analyzable // input related articles tmp chan
+	var currentStory Story
+	var relatedIn chan analyzer.Analyzable // input related articles tmp chan
 
-	var ostory AnalyzableStory           // output story
-	var results chan analyzer.Analyzable // output related article tmp chan
-
-	// input to the analyze function
-
-	// output from the analyze function
-	analyzed := make(chan analyzer.Analyzable)
+	var analyzedStory Story
+	var relatedOut chan analyzer.Analyzable // output related article tmp chan
 
 	// tells the analyzer to exit early
-	done := make(chan bool, 1) // buffered so we can write directly
+	cancelAnalyze := make(chan bool, 1)
 
-	// tmp holder variables
-	var processedArticle analyzer.Analyzable
-	var mainArticle analyzer.Analyzable
+	// tmp state holder
+	var analyzedArticle analyzer.Analyzable
 
-	// this func is run async to process data
-	// captures analyzed, module references to actual objs
-	// TODO: think about making this set-able
-	// 	Problem with making it setable is it doesn't get to capture....
-	manageAnalyze := func(main, related analyzer.Analyzable) {
+	// response type from article
+	type AnalyzedResponse struct {
+		article analyzer.Analyzable
+		use     bool
+	}
 
-		// process result
+	analyzed := make(chan AnalyzedResponse) // analyzed related articles
+
+	// wraps a call to analyze so we can do it async
+	doAnalyze := func(main, related analyzer.Analyzable) {
+
 		// TODO: let this kick things out of the pipe, give errors
-		result := m.Analyze(main, related)
+		// TODO: handle errors
+		err, use := m.Analyze(main, &related)
 
+		// TODO: set up to use err
+		if err != nil {
+			panic(err)
+		}
+
+		if !use {
+			fmt.Println("WARNING: if upstream write depends on downstream read this will break")
+		}
+
+		response := AnalyzedResponse{related, use}
 		// return or handle error/terminate
 		select {
-		case <-done:
-			fmt.Println("closing out of manageAnalyze early")
-			// TODO: make sure all the mem gets closed
+		case <-cancelAnalyze:
+			fmt.Println("closing out of doAnalyze early")
+			// TODO: make sure all the mem gets released and all processes stop
 			return
-		case analyzed <- result:
-			// this case is all good
+		case analyzed <- response:
 		}
 	}
 
-	// run the loop
 	for {
 
 		select {
-		case nextStory, isOpen := <-inc:
+		case nextStory, isOpen := <-inputStream:
 			// check if there is a new story
 
 			if !isOpen {
-				fmt.Println("done reading from input chan")
+				fmt.Println("cancelAnalyze reading from input chan")
 				// if the line closed
 				// TODO: decide if we want it to stay open or go for close here...
 
 				// stop reading from the input story chan
-				inc = nil
+				inputStream = nil
 
 				// let it loop until told to close
 				// TODO: make some way to handle it
 				break
 			}
 
-			// set the current story
-			istory = nextStory
+			currentStory = nextStory
 
-			// once you have a story, build the output and set the inc to nil
-			// so that we don't get another story too soon
-			inc = nil
+			// don't get a new story until we are cancelAnalyze with this one
+			inputStream = nil
 
 			// build the output story
-			ostory.MainArticle = istory.MainArticle
-			ostory.RelatedArticles = make(chan analyzer.Analyzable)
+			analyzedStory.MainArticle = currentStory.MainArticle
+			analyzedStory.RelatedArticles = make(chan analyzer.Analyzable)
 
-			// enable story out chan
-			outc = m.GetOutputChan()
+			// enable story output stream
+			outputStream = m.GetOutputChan()
 
-		case outc <- ostory:
-			// send the output story to the next stage
+		case outputStream <- analyzedStory:
+			// write the story down stream
 
-			// disable story out chan
-			outc = nil
+			relatedIn = currentStory.RelatedArticles
+			outputStream = nil
 
-			// story is connected to next stage, start reading input and set main article
-			storyc = istory.RelatedArticles
-			mainArticle = istory.MainArticle
-
-		case next, isOpen := <-storyc:
-			// read related article stream
-
-			// wait to read next article
-			storyc = nil
+		case next, isOpen := <-relatedIn:
+			// read and analyze each related article in the current story
 
 			if !isOpen {
-				// we are at the end of the current story's line
-				// read on closed chan returns zero value (null in this case)
 
-				// close the story's related stream
-				close(ostory.RelatedArticles)
-				ostory.RelatedArticles = nil
+				// close this story up
+				close(analyzedStory.RelatedArticles)
+				analyzedStory.RelatedArticles = nil
 
-				// enable reading the main article stream
-				inc = m.getInputChan()
+				// look for next story
+				inputStream = m.getInputChan()
+				relatedIn = nil
 
-				break // get out of this if statement
+				break
 			}
 
-			// analyze the story
+			// don't read a new article until we analyze this one
+			relatedIn = nil
+
 			// TODO: look into staging this all better
-			go manageAnalyze(mainArticle, next)
+			go doAnalyze(currentStory.MainArticle, next)
 
-		case processedArticle = <-analyzed:
-			// read the analyzed result
-			// TODO: look into handling kicking values out of the stream
+		case analyzedResponse := <-analyzed:
 
-			// enable writing the analyzed related article to the output stream
-			results = ostory.RelatedArticles
+			if analyzedResponse.use {
 
-		case results <- processedArticle:
-			// write the analyzed related article to the output stream
+				// only write the article if the stream lets us
+				relatedOut = analyzedStory.RelatedArticles
+				analyzedArticle = analyzedResponse.article
 
-			// disable writing to the output stream
-			results = nil
+			} else {
 
-			// enable reading the input story's related article stream
-			storyc = istory.RelatedArticles
+				// go run to related
+				relatedIn = currentStory.RelatedArticles
+			}
+
+		case relatedOut <- analyzedArticle:
+
+			// read the next related article
+			relatedIn = currentStory.RelatedArticles
+
+			relatedOut = nil
 
 		case errc := <-m.getClose():
 			// stop the run function
 			// its up to the module's Close func to close
 			// the closing, err, output chans
 
-			if done != nil {
+			if cancelAnalyze != nil {
 				select {
-				case done <- true:
-					fmt.Println("send done OK")
-					// try to send done down the line
+				case cancelAnalyze <- true:
+					fmt.Println("send cancelAnalyze OK")
+					// try to send cancelAnalyze down the line
 					// TODO: test this
 				default:
-					fmt.Println("warning, could not send done down to chan")
-					close(done)
+					fmt.Println("warning, could not send cancelAnalyze down to chan")
+					close(cancelAnalyze)
 				}
 			}
 
-			// stop reading analyzed
-
 			// close the chans we created
-			if ostory.RelatedArticles != nil {
-				close(ostory.RelatedArticles)
+			if analyzedStory.RelatedArticles != nil {
+				close(analyzedStory.RelatedArticles)
 			}
 
 			// send the error down stream and exit

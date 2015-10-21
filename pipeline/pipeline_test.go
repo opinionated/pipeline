@@ -11,7 +11,7 @@ import (
 
 // functions to help with testing
 
-func BuildStoryFromFile(name, file string) pipeline.AnalyzableStory {
+func BuildStoryFromFile(name, file string) pipeline.Story {
 	f, err := os.Open(file)
 	defer f.Close()
 
@@ -26,7 +26,7 @@ func BuildStoryFromFile(name, file string) pipeline.AnalyzableStory {
 		panic(err)
 	}
 
-	story := pipeline.AnalyzableStory{}
+	story := pipeline.Story{}
 	story.MainArticle = analyzer.Analyzable{}
 	story.MainArticle.Name = "main"
 	_, ok := config.From(name).Nested("inputSet").GetArray("related")
@@ -40,10 +40,10 @@ func BuildStoryFromFile(name, file string) pipeline.AnalyzableStory {
 
 // manages testing of a story, given the input and expected output
 // load the story you want it to drive, then build it from the file
-func StoryDriver(t *testing.T, inc chan pipeline.AnalyzableStory, output chan pipeline.AnalyzableStory, name string, done chan bool) {
+func StoryDriver(t *testing.T, inc chan pipeline.Story, output chan pipeline.Story, name string, done chan bool) {
 
 	// build the story to send down the pipe
-	story := pipeline.AnalyzableStory{}
+	story := pipeline.Story{}
 	story.RelatedArticles = make(chan analyzer.Analyzable)
 
 	// send it down k
@@ -126,7 +126,7 @@ func TestBuildStory(t *testing.T) {
 	pipe := pipeline.TaxonomyModule{}
 	pipe.Setup()
 
-	inc := make(chan pipeline.AnalyzableStory)
+	inc := make(chan pipeline.Story)
 	pipe.SetInputChan(inc)
 	pipe.SetErrorPropogateChan(make(chan error))
 	go pipeline.Run(&pipe)
