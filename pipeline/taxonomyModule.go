@@ -2,7 +2,9 @@ package pipeline
 
 import (
 	"fmt"
+	"github.com/opinionated/analyzer-core/alchemy"
 	"github.com/opinionated/analyzer-core/analyzer"
+	"os"
 )
 
 type TaxonomyModule struct {
@@ -12,19 +14,60 @@ type TaxonomyModule struct {
 	err     chan error
 	closing chan chan error
 
-	mainArticle analyzer.Analyzable
+	mainTaxonomys []alchemy.Taxonomy
 }
 
+// TODO: think about switching the order of err + bool
 func (m *TaxonomyModule) Analyze(main analyzer.Analyzable,
 	related *analyzer.Analyzable) (error, bool) {
 
-	if main.Name == " " {
-		fmt.Println("empty name")
+	// TODO: reload when the taxonomies close
+	if len(m.mainTaxonomys) == 0 {
+		tax, err := m.getArticleTaxonomy(main)
+		if err != nil {
+			return err, false
+		}
+
+		m.mainTaxonomys = tax
+	}
+
+	// load the related article taxonomies
+	relatedTax, err := m.getArticleTaxonomy(*related)
+	if err != nil {
+		return err, false
+	}
+
+	// TODO: make a helper function so we can change how
+	// the scoring is done
+	if m.mainTaxonomys[0].Label == relatedTax[0].Label {
 		return nil, true
 	}
 
 	// TODO: put taxonomy analyze code in here
-	return nil, true
+	return nil, false
+}
+
+// helper function to load taxonomies from file
+// made a member so it doesn't clutter package
+func (m *TaxonomyModule) getArticleTaxonomy(article analyzer.Analyzable) ([]alchemy.Taxonomy, error) {
+
+	// open tax file
+	file, err := os.Open(article.FileName + "_taxonomy.xml")
+	defer file.Close()
+	if err != nil {
+		fmt.Println("oh nsoe, error opening file")
+		return []alchemy.Taxonomy{}, err
+	}
+
+	// read taxonomies from file
+	ret := alchemy.Taxonomys{}
+	err = alchemy.ToXML(file, &ret)
+	if err != nil {
+		fmt.Println("oh nose, error reading file")
+		return []alchemy.Taxonomy{}, err
+	}
+
+	return ret.Taxonomys, err
 }
 
 func (m *TaxonomyModule) Setup() {

@@ -44,6 +44,16 @@ func StoryDriver(t *testing.T, inc chan pipeline.Story, output chan pipeline.Sto
 
 	// build the story to send down the pipe
 	story := pipeline.Story{}
+
+	story.MainArticle = analyzer.Analyzable{}
+	input := config.From(name).Nested("inputSet")
+	mainName, ok := input.Get("main").(string)
+	if !ok {
+		panic("could not read main article name")
+	}
+	story.MainArticle.Name = mainName
+	story.MainArticle.FileName = "testData/" + mainName
+
 	story.RelatedArticles = make(chan analyzer.Analyzable)
 
 	// send it down k
@@ -52,7 +62,6 @@ func StoryDriver(t *testing.T, inc chan pipeline.Story, output chan pipeline.Sto
 	// go feed the stories into the pipe
 	go func() {
 		// build the inputs
-		input := config.From(name).Nested("inputSet")
 		arr, ok := input.GetArray("related")
 
 		if !ok {
@@ -66,6 +75,7 @@ func StoryDriver(t *testing.T, inc chan pipeline.Story, output chan pipeline.Sto
 				panic("error, could not convert type!")
 			}
 			related.Name = str
+			related.FileName = "testData/" + str
 			fmt.Println("sending:", related.Name)
 			story.RelatedArticles <- related
 		}
@@ -109,19 +119,22 @@ func StoryDriver(t *testing.T, inc chan pipeline.Story, output chan pipeline.Sto
 
 			i++
 		}
+
+		if i != len(arr) {
+			t.Errorf("failed to read all the expected inputs out of the pipe")
+		}
 		// finish up
 		quit <- true
 	}()
 
 	<-quit
 
-	fmt.Println("all done")
 	done <- true
 }
 
 func TestBuildStory(t *testing.T) {
 	// TODO: move this over to taxonomy
-	BuildStoryFromFile("test", "testSets/testPipe.json")
+	BuildStoryFromFile("test", "testSets/simpleTaxonomy.json")
 
 	pipe := pipeline.TaxonomyModule{}
 	pipe.Setup()

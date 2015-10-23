@@ -18,10 +18,10 @@ type Module interface {
 	Setup()
 
 	// compare one related article to the main article
-	// return the related article
-	// TODO: change the signature here, maybe think about making this
 	// return err, useAgain and moding the analyzable by reference
 	Analyze(analyzer.Analyzable, *analyzer.Analyzable) (error, bool)
+
+	// TODO: handle when the story changes
 
 	// up to each module to make sure the close happens properly
 	Close() error
@@ -189,7 +189,7 @@ func Run(m Module) {
 			if cancelAnalyze != nil {
 				select {
 				case cancelAnalyze <- true:
-					fmt.Println("send cancelAnalyze OK")
+					fmt.Println("sent cancel analyze")
 					// try to send cancelAnalyze down the line
 					// TODO: test this
 				default:
