@@ -2,192 +2,76 @@ package pipeline
 
 import (
 	"fmt"
+	"github.com/opinionated/analyzer-core/alchemy"
 	"github.com/opinionated/analyzer-core/analyzer"
+	"os"
 )
 
 type TaxonomyModule struct {
-	in  chan AnalyzableStory
-	out chan AnalyzableStory
+	in  chan Story
+	out chan Story
 
 	err     chan error
 	closing chan chan error
 
-	mainArticle analyzer.Analyzable
+	mainTaxonomys []alchemy.Taxonomy
 }
 
-// actually runs the analysis
-func (m *TaxonomyModule) Analyze(in chan analyzer.Analyzable,
-	out chan analyzer.Analyzable,
-	done chan bool) {
+// TODO: think about switching the order of err + bool
+func (m *TaxonomyModule) Analyze(main analyzer.Analyzable,
+	related *analyzer.Analyzable) (error, bool) {
 
-	var article analyzer.Analyzable
-	intmp := in
-	var outtmp chan analyzer.Analyzable
-	for {
-		select {
-		case <-done:
-			return
-		case article = <-intmp:
-			//fmt.Println("reading file:", article.Name)
-			outtmp = out
-			intmp = nil
-		case outtmp <- article:
-			outtmp = nil
-			intmp = in
+	// TODO: reload when the taxonomies close
+	if len(m.mainTaxonomys) == 0 {
+		tax, err := m.getArticleTaxonomy(main)
+		if err != nil {
+			return err, false
 		}
+
+		m.mainTaxonomys = tax
 	}
-	fmt.Println("oh nose!!!")
+
+	// load the related article taxonomies
+	relatedTax, err := m.getArticleTaxonomy(*related)
+	if err != nil {
+		return err, false
+	}
+
+	// TODO: make a helper function so we can change how
+	// the scoring is done
+	if m.mainTaxonomys[0].Label == relatedTax[0].Label {
+		return nil, true
+	}
+
+	// TODO: put taxonomy analyze code in here
+	return nil, false
 }
 
-func (m *TaxonomyModule) Run() {
-	var err error
-	// this function manages the input chan so Analyze is only fed new values
-	// when the value can be written
+// helper function to load taxonomies from file
+// made a member so it doesn't clutter package
+func (m *TaxonomyModule) getArticleTaxonomy(article analyzer.Analyzable) ([]alchemy.Taxonomy, error) {
 
-	// we need to worry about blocking calls here because they might make us miss
-	// an error or a close
-	// avoid blocking by moving variables through this stage in buffered pipes
-	// this problem becomes a bit of a cluster because we pass a pipe through a pipe
-
-	// take advantage of how reads from nil pipes hang to control flow
-	// create a bunch of nil-able tmp vars to stand in for the actual chans
-
-	var inc = m.in
-	var outc chan AnalyzableStory
-
-	// vars for the story, we have an out value and an in value
-	var istory AnalyzableStory
-	var storyc chan analyzer.Analyzable
-
-	var ostory AnalyzableStory
-
-	// set up the actual analyze function
-	analyze_in := make(chan analyzer.Analyzable)
-	var analyze chan analyzer.Analyzable
-
-	analyze_out := make(chan analyzer.Analyzable) // buffed to save one var
-	var results chan analyzer.Analyzable
-
-	finishAnalyzer := make(chan bool, 1)
-
-	var freshArticle analyzer.Analyzable
-	var processedArticle analyzer.Analyzable
-
-	// now spin up the analyzer
-	go m.Analyze(analyze_in, analyze_out, finishAnalyzer)
-
-	for {
-		// declare vars that get run by the loop here
-		select {
-
-		// 1) READ THE NEXT STORY ON THE LINE
-		case nextStory, isOpen := <-inc:
-			// if the line closes, close the module
-			if !isOpen {
-				//fmt.Println("closing pipe")
-				// TODO: decide how to handle this
-				// stop the analyze task
-				finishAnalyzer <- true
-
-				// don't let it read from here again
-				inc = nil
-
-				// handle this how you normally would with closing
-				break
-			}
-			istory = nextStory
-
-			// once you have a story, build the output and set the inc to nil
-			// so that we don't get another story too soon
-			inc = nil
-
-			// build the output story
-			// TODO: need to make sure we won't have issues with this kind of copy
-			ostory.MainArticle = istory.MainArticle
-			ostory.RelatedArticles = make(chan analyzer.Analyzable)
-
-			// enable sending to out
-			outc = m.out
-
-		case outc <- ostory:
-			// wait to start processing the next story until you can pass it down the line
-			outc = nil
-
-			// once we know we have someone to read, we can send down the line
-			storyc = istory.RelatedArticles
-
-			// once this has been written, now set up the analyzable
-			m.mainArticle = istory.MainArticle
-
-		case next, isOpen := <-storyc:
-			// process each story as it comes out of the main
-			storyc = nil // no mater what, don't go get the next article yet
-
-			if !isOpen {
-				// we are at the end of the loop
-				// read on closed chan returns zero value (null in this case)
-				// TODO: sync this with the analyze func so we don't write on closed stream
-				close(ostory.RelatedArticles)
-				ostory.RelatedArticles = nil
-
-				// start looking for the next story in the stream
-				inc = m.in
-				break // get out of this if statement
-			}
-
-			// send what we just read over to the analyzer
-			freshArticle = next
-			analyze = analyze_in
-
-		case analyze <- freshArticle:
-			// try to read the next relevant article
-			analyze = nil
-
-		case processedArticle = <-analyze_out:
-			results = ostory.RelatedArticles
-
-		case results <- processedArticle:
-			results = nil
-			storyc = istory.RelatedArticles
-
-		case errc := <-m.closing:
-			// send the error back
-
-			// close anything open
-			m.in = nil
-			close(m.err)
-			close(m.closing)
-			close(m.out)
-
-			// close the chans we created
-			close(analyze_in)
-			if ostory.RelatedArticles != nil {
-				close(ostory.RelatedArticles)
-			}
-
-			finishAnalyzer <- true
-			close(finishAnalyzer)
-
-			errc <- err
-			//fmt.Println("done with close")
-			// end the go routine
-			return
-
-		case bigErr := <-m.err:
-			// what to do when a big error comes along
-			// propogate and return
-			m.err <- bigErr
-			err = bigErr
-
-			// ignore any values that will come down the line
-			// TODO: make all these nil
-			m.in = nil
-		}
+	// open tax file
+	file, err := os.Open(article.FileName + "_taxonomy.xml")
+	defer file.Close()
+	if err != nil {
+		fmt.Println("oh nsoe, error opening file")
+		return []alchemy.Taxonomy{}, err
 	}
+
+	// read taxonomies from file
+	ret := alchemy.Taxonomys{}
+	err = alchemy.ToXML(file, &ret)
+	if err != nil {
+		fmt.Println("oh nose, error reading file")
+		return []alchemy.Taxonomy{}, err
+	}
+
+	return ret.Taxonomys, err
 }
 
 func (m *TaxonomyModule) Setup() {
-	m.out = make(chan AnalyzableStory, 1)
+	m.out = make(chan Story)
 	m.closing = make(chan chan error)
 }
 
@@ -197,16 +81,28 @@ func (m *TaxonomyModule) Close() error {
 	return <-errc
 }
 
-func (m *TaxonomyModule) SetInputChan(inc chan AnalyzableStory) {
+func (m *TaxonomyModule) SetInputChan(inc chan Story) {
 	m.in = inc
 }
 
-func (m *TaxonomyModule) GetOutputChan() chan AnalyzableStory {
+func (m *TaxonomyModule) GetOutputChan() chan Story {
 	return m.out
 }
 
 func (m *TaxonomyModule) SetErrorPropogateChan(errc chan error) {
 	m.err = errc
+}
+
+func (m *TaxonomyModule) getErrorPropogateChan() chan error {
+	return m.err
+}
+
+func (m *TaxonomyModule) getInputChan() chan Story {
+	return m.in
+}
+
+func (m *TaxonomyModule) getClose() chan chan error {
+	return m.closing
 }
 
 // check that was compiled properly

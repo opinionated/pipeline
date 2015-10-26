@@ -1,71 +1,119 @@
 package pipeline
 
 import (
-	"github.com/opinionated/analyzer-core/alchemy"
-	"github.com/opinionated/analyzer-core/analyzer"
-	"os"
+	"fmt"
+	"sync"
 )
 
-// TODO: make error chans
+// class to handle the entire pipeline, acts as the manager
 
-// filter by taxonomy, this is just a rought for now
-func FilterTaxonomy(top analyzer.Analyzable,
-	in chan analyzer.Analyzable) chan analyzer.Analyzable {
+type Pipeline struct {
+	modules []Module
+	size    int
 
-	out := make(chan analyzer.Analyzable)
-	// get a chan with the taxonomys already loaded
-	withTaxonomy := LoadTaxonomy(in)
+	in   chan Story
+	errc chan error
 
-	go func() {
-		for toAnalyze := range withTaxonomy {
-			// TODO: make a filtering function to score them
-			if toAnalyze.Taxonomys.Taxonomys[0].Label == top.Taxonomys.Taxonomys[0].Label {
-				out <- toAnalyze
-			}
-		}
-		close(out)
-	}()
+	closeModules chan bool // treat this like a signal
 
-	return out
+	// count how many running modules we have
+	// use to make sure all modules get closed cleanly
+	wg sync.WaitGroup
 }
 
-// Gets taxonomy data from file and puts it into the chan
-func LoadTaxonomy(in chan analyzer.Analyzable) chan analyzer.Analyzable {
-
-	out := make(chan analyzer.Analyzable)
-
-	names := make(chan string)
-	go func() {
-		files := openFile(names)
-		for toAnalyze := range in {
-			names <- toAnalyze.FileName + "_taxonomy.xml"
-			toRead := <-files
-			defer toRead.Close() // need to close b/c open file won't do it for you
-			err := alchemy.ToXML(toRead, &toAnalyze.Taxonomys)
-			if err != nil {
-				panic(err)
-			}
-			out <- toAnalyze
-		}
-		close(out)
-	}()
-
-	return out
+func NewPipeline(numStages int) *Pipeline {
+	p := &Pipeline{
+		modules:      make([]Module, numStages, numStages),
+		size:         0,
+		errc:         make(chan error),
+		closeModules: make(chan bool),
+	}
+	return p
 }
 
-// NOTE: does not close file, you will need to do that later
-func openFile(in chan string) chan *os.File {
-	out := make(chan *os.File)
+// expected to run this before the thing is set up
+func (p *Pipeline) SetInput(inc chan Story) {
+	if len(p.modules) > 0 {
+		//panic("going to set input before pipeline gets built")
+	}
 
-	go func() {
-		for name := range in {
-			file, err := os.Open(name)
-			if err != nil {
-				panic(err)
-			}
-			out <- file
-		}
-		close(out)
-	}()
-	return out
+	p.in = inc
+}
+
+// add a new module, assumes that the module has not been set up yet
+func (p *Pipeline) AddStage(m Module) {
+	if p.size == cap(p.modules) {
+		panic("added more modules than expected... going beyond cap")
+	}
+
+	m.Setup()
+
+	if p.size == 0 {
+		// if first element
+		m.SetInputChan(p.in)
+	} else {
+		m.SetInputChan(p.GetOutput())
+	}
+
+	// modules propogate errors up to the pipeline
+	m.SetErrorPropogateChan(p.errc)
+
+	p.modules[p.size] = m
+	p.size = p.size + 1
+}
+
+// run the pipeline
+func (p *Pipeline) Start() {
+	if p.size == 0 {
+		panic("tring to run an empty pipe")
+	}
+
+	for _, m := range p.modules {
+
+		p.wg.Add(1)
+		go p.runStage(m, p.closeModules)
+	}
+
+	go p.run()
+}
+
+func (p *Pipeline) run() {
+	// wait until pipeline gets closed or a module has a big error
+	select {
+	case err := <-p.errc:
+		fmt.Println("pipeline is not set up to handle big errors yet")
+		panic(err)
+	case <-p.closeModules:
+
+	}
+}
+
+func (p *Pipeline) Stop() {
+	// use the closeModules chan as a signal
+	close(p.closeModules)
+
+	// don't finish until all modules close
+	p.wg.Wait()
+}
+
+func (p *Pipeline) GetOutput() chan Story {
+	if p.size == 0 {
+		panic("tried getting output of nil")
+	}
+
+	return p.modules[p.size-1].GetOutputChan()
+}
+
+// run a stage of the module, called by the pipeline
+// m is the module to be run and is already all hooked up, is a reference
+// terminate stops the stage from running
+func (p *Pipeline) runStage(m Module, terminate chan bool) {
+	go Run(m)
+
+	// wait until terminate is sent in
+	select {
+	case <-terminate:
+		m.Close()
+	}
+	p.wg.Done()
 }
