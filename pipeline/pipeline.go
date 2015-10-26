@@ -5,8 +5,7 @@ import (
 	"sync"
 )
 
-// class to handle the entire pipeline, acts as the manager
-
+// Pipeline manages a series of pipeline modules
 type Pipeline struct {
 	modules []Module
 	size    int
@@ -21,6 +20,7 @@ type Pipeline struct {
 	wg sync.WaitGroup
 }
 
+// NewPipeline builds a new pipeline with the given number of stages
 func NewPipeline(numStages int) *Pipeline {
 	p := &Pipeline{
 		modules:      make([]Module, numStages, numStages),
@@ -31,6 +31,7 @@ func NewPipeline(numStages int) *Pipeline {
 	return p
 }
 
+// SetInput sets the pipeline input chan
 // expected to run this before the thing is set up
 func (p *Pipeline) SetInput(inc chan Story) {
 	if len(p.modules) > 0 {
@@ -40,7 +41,7 @@ func (p *Pipeline) SetInput(inc chan Story) {
 	p.in = inc
 }
 
-// add a new module, assumes that the module has not been set up yet
+// AddStage adds a new module, assumes that the module has not been set up yet
 func (p *Pipeline) AddStage(m Module) {
 	if p.size == cap(p.modules) {
 		panic("added more modules than expected... going beyond cap")
@@ -62,7 +63,16 @@ func (p *Pipeline) AddStage(m Module) {
 	p.size = p.size + 1
 }
 
-// run the pipeline
+// GetOutput returns the final output chan of the pipeline
+func (p *Pipeline) GetOutput() chan Story {
+	if p.size == 0 {
+		panic("tried getting output of nil")
+	}
+
+	return p.modules[p.size-1].GetOutputChan()
+}
+
+// Start the pipeline
 func (p *Pipeline) Start() {
 	if p.size == 0 {
 		panic("tring to run an empty pipe")
@@ -88,6 +98,7 @@ func (p *Pipeline) run() {
 	}
 }
 
+// Stop the pipeline
 func (p *Pipeline) Stop() {
 	// use the closeModules chan as a signal
 	close(p.closeModules)
@@ -96,24 +107,16 @@ func (p *Pipeline) Stop() {
 	p.wg.Wait()
 }
 
-func (p *Pipeline) GetOutput() chan Story {
-	if p.size == 0 {
-		panic("tried getting output of nil")
-	}
-
-	return p.modules[p.size-1].GetOutputChan()
-}
-
 // run a stage of the module, called by the pipeline
 // m is the module to be run and is already all hooked up, is a reference
 // terminate stops the stage from running
 func (p *Pipeline) runStage(m Module, terminate chan bool) {
 	go Run(m)
 
-	// wait until terminate is sent in
-	select {
-	case <-terminate:
-		m.Close()
-	}
+	// wait for close signal
+	<-terminate
+	m.Close()
+
+	// decrease open module count
 	p.wg.Done()
 }
