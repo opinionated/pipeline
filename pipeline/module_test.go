@@ -85,6 +85,8 @@ func StoryDriver(t *testing.T, inc chan pipeline.Story, output chan pipeline.Sto
 	}()
 
 	// read the actual ouput and compare it to the expected
+	// TODO: make proper error handling here... turns out t.Errorf won't break it
+	// seems like t.* needs to be used from main thread
 	quit := make(chan bool)
 	go func() {
 		ostory := <-output
@@ -97,16 +99,18 @@ func StoryDriver(t *testing.T, inc chan pipeline.Story, output chan pipeline.Sto
 		i := 0 // count along with expected
 
 		for article := range ostory.RelatedArticles {
-			if i > len(arr) {
+			if i >= len(arr) {
 				// make sure it doesn't go out of range
-				t.Errorf("unexpected output for set %s: article %s is beyond test set",
+				fmt.Printf("unexpected output for set %s: article %s is beyond test set\n",
 					name,
 					article.Name)
+				close(quit)
+				return
 			}
-
 			fmt.Println("from pipe:", article.Name)
 			// convert arr to str
 			str, ok := arr[i].(string)
+
 			if !ok {
 				panic("error, could not convert output to string")
 			}
