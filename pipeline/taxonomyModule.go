@@ -20,19 +20,21 @@ type TaxonomyModule struct {
 	closing chan chan error
 
 	mainTaxonomys []alchemy.Taxonomy
-	db            *neoism.Database
+
+	db    *neoism.Database // db driver for neo4j graph db
+	cache Neo4jCache       // simple cache to store neo requests
 }
 
 // Analyze ranks articles by taxonomy.
 func (m *TaxonomyModule) Analyze(main analyzer.Analyzable,
-	related *analyzer.Analyzable) (error, bool) {
+	related *analyzer.Analyzable) (bool, error) {
 
 	// reload taxonomies
 	// TODO: make a compare so we can check when main article changes
 	if len(m.mainTaxonomys) == 0 {
 		tax, err := m.getArticleTaxonomy(main)
 		if err != nil {
-			return err, false
+			return false, err
 		}
 
 		m.mainTaxonomys = tax
@@ -41,79 +43,91 @@ func (m *TaxonomyModule) Analyze(main analyzer.Analyzable,
 	// load the related article taxonomies
 	relatedTax, err := m.getArticleTaxonomy(*related)
 	if err != nil {
-		return err, false
+		return false, err
 	}
 
-	if m.mainTaxonomys[0].Label == relatedTax[0].Label {
-		//		fmt.Println("done here")
-		//		return nil, true
-	}
-
+	// score taxonomies
 	str, err := m.rankTaxonomyAgainsMain(relatedTax)
-	fmt.Println("main", main.Name, "related", related.Name, "score:", str)
-
 	if err != nil {
 		fmt.Println("got an err:", err)
-		return nil, false
-	}
-	fmt.Println("got str:", str)
-	if str == 0 {
-		return nil, false
+		return false, err
 	}
 
+	// update related score
+	related.Score += str
+
 	// TODO: put taxonomy analyze code in here
-	return nil, true
+	return true, nil
 }
 
 // actually does scoring, returns score
 func (m *TaxonomyModule) rankTaxonomyAgainsMain(related []alchemy.Taxonomy) (float64, error) {
+
 	totalScore := 0.0
-	//fmt.Println("main:", m.mainTaxonomys, "related:", related)
+
 	for _, mainTax := range m.mainTaxonomys {
 		for _, relatedTax := range related {
-			//fmt.Println("comparing", mainTax.Label, "against", relatedTax.Label)
+
 			if mainTax.Label == relatedTax.Label {
-				totalScore += 5.0
+				// give equlivalent taxonomies a high score
+				totalScore += 5.0 * float64(mainTax.Score*relatedTax.Score)
 				continue
 			}
+
+			// fetch from DB
 			score, err := m.getRelationStrength(mainTax.Label, relatedTax.Label)
 			if err != nil {
+				// TODO: handle this error better
 				return 0.0, err
 			}
+
+			// factor in the taxonomy weights
+			score *= float64(mainTax.Score * relatedTax.Score)
 			totalScore += score
 		}
 	}
+
 	return totalScore, nil
 }
 
 // sends off DB request
+// TODO: clean and speed this up
 func (m *TaxonomyModule) getRelationStrength(main, related string) (float64, error) {
-	res := []struct {
-		strength float64 `json:"r.cost"`
-		rType    string  `json:"type(r)"`
-	}{}
+	// check if this request is cached
+	// saves sending a net reqeust
+	if v, isCached := m.cache.Get(main, related); isCached {
+		// is now only a minor time saver, will get bigger with large data sets
+		return v, nil
+	}
 
 	cq := neoism.CypherQuery{
-		Statement: `MATCH (a)-[r]-(b) WHERE a.name={main} AND b.name={related} RETURN r.cost,type(r)`,
-		//Statement:  `MATCH (a)-[r]-(b) WHERE a.name={main} AND b.name={related} RETURN a`,
+		Statement: `MATCH (a)-[r]-(b) 
+		WHERE a.name={main} AND b.name={related} 
+		RETURN r.cost`,
 		Parameters: neoism.Props{"main": main, "related": related},
-		Result:     &res,
+		Result:     []struct{}{},
 	}
+
+	// neoism seems to be broken so build request manualy
 	type cypherRequest struct {
 		Query      string                 `json:"query"`
 		Parameters map[string]interface{} `json:"params"`
 	}
+
 	type cypherResult struct {
 		Columns []string
 		Data    [][]*json.RawMessage
 	}
+
 	result := cypherResult{}
 	payload := cypherRequest{
 		Query:      cq.Statement,
 		Parameters: cq.Parameters,
 	}
+
 	ne := neoism.NeoError{}
-	url := m.db.HrefCypher
+	url := m.db.HrefCypher // get URL through db driver
+	// send request
 	resp, err := m.db.Session.Post(url, &payload, &result, &ne)
 	if err != nil {
 		fmt.Println("resp is:", resp)
@@ -121,24 +135,29 @@ func (m *TaxonomyModule) getRelationStrength(main, related string) (float64, err
 	}
 
 	if len(result.Data) > 0 {
-		j := result.Data[0][0]
-		r, err := j.MarshalJSON()
+		// read in the first (and only) element
+		rawMessage := result.Data[0][0]
+		r, err := rawMessage.MarshalJSON()
 		if err != nil {
 			panic(err)
 		}
 
+		// be lazy and convert it to string then atoi the string
 		s := string(r[:])
 		score, err := strconv.Atoi(s)
 		if err != nil {
 			panic(err)
 		}
-		//fmt.Println("score is:", score)
+
 		fmt.Println("connected main:", main, "related:", related, "score:", score)
+
+		// add this query to the cache (wouldn't hit here if it was in cache)
+		m.cache.Add(main, related, float64(score))
+
 		return float64(score), nil
 	}
 	fmt.Println("failed to connect main:", main, "related:", related)
 
-	//fmt.Println("len result is too long:", result)
 	return 0, nil
 }
 
@@ -175,6 +194,8 @@ func (m *TaxonomyModule) Setup() {
 	}
 
 	m.db = db
+
+	m.cache.Setup()
 }
 
 func (m *TaxonomyModule) Close() error {

@@ -28,7 +28,7 @@ def CreateSimplePipe(name):
     WriteStruct(fd, name)
 
     WriteAnalyze(fd, name)
-    WriteRun(fd, name)
+    #WriteRun(fd, name)
     WriteSetup(fd, name)
     WriteClose(fd, name)
     WriteSetInputChan(fd, name)

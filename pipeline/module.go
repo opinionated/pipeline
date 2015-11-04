@@ -18,7 +18,7 @@ type Module interface {
 	// Analyze is run on each article in a Story's related articles. It ranks
 	// the related article against the main article. This is the meat of each
 	// module.
-	Analyze(analyzer.Analyzable, *analyzer.Analyzable) (error, bool)
+	Analyze(analyzer.Analyzable, *analyzer.Analyzable) (bool, error)
 
 	// up to each module to make sure the close happens properly
 	Close() error
@@ -76,7 +76,7 @@ func Run(m Module) {
 
 		// TODO: let this kick things out of the pipe, give errors
 		// TODO: handle errors
-		err, use := m.Analyze(main, &related)
+		use, err := m.Analyze(main, &related)
 
 		// TODO: set up to use err
 		if err != nil {
