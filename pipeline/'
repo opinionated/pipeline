@@ -24,8 +24,6 @@ func TestTaxonomySimple(t *testing.T) {
 	err := <-errc
 	if err != nil {
 		t.Errorf("%s", err)
-	} else {
 		close(errc)
-	}
-	pipe.Close()
+	} 	pipe.Close()
 }

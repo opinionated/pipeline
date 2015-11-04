@@ -16,10 +16,15 @@ func TestDoubleStage(t *testing.T) {
 
 	go p.Start()
 
-	done := make(chan bool)
+	errc := make(chan error)
 	_ = BuildStoryFromFile("simpleTaxonomy", "testSets/simpleTaxonomy.json")
-	go StoryDriver(t, inc, p.GetOutput(), "simpleTaxonomy", done)
-	<-done
+	go StoryDriver(errc, inc, p.GetOutput(), "simpleTaxonomy")
 
+	err := <-errc
+	if err != nil {
+		t.Errorf("%s", err)
+		close(errc)
+	}
 	p.Stop()
+
 }

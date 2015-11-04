@@ -7,8 +7,11 @@ import (
 	"github.com/opinionated/analyzer-core/alchemy"
 	"github.com/opinionated/analyzer-core/analyzer"
 	"os"
+	"strconv"
 )
 
+// TaxonomyModule ranks articles by taxonomy, a high level grouping. An
+// example taxonomy might be "government and politics/elections".
 type TaxonomyModule struct {
 	in  chan Story
 	out chan Story
@@ -20,7 +23,7 @@ type TaxonomyModule struct {
 	db            *neoism.Database
 }
 
-// TODO: think about switching the order of err + bool
+// Analyze ranks articles by taxonomy.
 func (m *TaxonomyModule) Analyze(main analyzer.Analyzable,
 	related *analyzer.Analyzable) (error, bool) {
 
@@ -62,14 +65,14 @@ func (m *TaxonomyModule) Analyze(main analyzer.Analyzable,
 	return nil, true
 }
 
+// actually does scoring, returns score
 func (m *TaxonomyModule) rankTaxonomyAgainsMain(related []alchemy.Taxonomy) (float64, error) {
 	totalScore := 0.0
-	fmt.Println("main:", m.mainTaxonomys, "related:", related)
+	//fmt.Println("main:", m.mainTaxonomys, "related:", related)
 	for _, mainTax := range m.mainTaxonomys {
 		for _, relatedTax := range related {
-			fmt.Println("comparing", mainTax.Label, "against", relatedTax.Label)
+			//fmt.Println("comparing", mainTax.Label, "against", relatedTax.Label)
 			if mainTax.Label == relatedTax.Label {
-				fmt.Println("are equivalent")
 				totalScore += 5.0
 				continue
 			}
@@ -77,12 +80,13 @@ func (m *TaxonomyModule) rankTaxonomyAgainsMain(related []alchemy.Taxonomy) (flo
 			if err != nil {
 				return 0.0, err
 			}
-			totalScore += float64(score)
+			totalScore += score
 		}
 	}
 	return totalScore, nil
 }
 
+// sends off DB request
 func (m *TaxonomyModule) getRelationStrength(main, related string) (float64, error) {
 	res := []struct {
 		strength float64 `json:"r.cost"`
@@ -111,28 +115,31 @@ func (m *TaxonomyModule) getRelationStrength(main, related string) (float64, err
 	ne := neoism.NeoError{}
 	url := m.db.HrefCypher
 	resp, err := m.db.Session.Post(url, &payload, &result, &ne)
-	if len(result.Data) > 0 {
-		//tmpLen := len(result.Data[0][1])
-		j := result.Data[0][0]
-		r, err := j.MarshalJSON()
-		s := string(r[:len(r)])
-		fmt.Println("body is: ", s, "err:", err)
-		fmt.Println("resp raw is:", result)
-		fmt.Println("resp is:", result.Data[0][1])
-	}
-	//err := m.db.Cypher(&cq)
 	if err != nil {
 		fmt.Println("resp is:", resp)
 		panic(err)
 	}
 
-	if len(res) == 0 {
-		return 0, err
-	}
+	if len(result.Data) > 0 {
+		j := result.Data[0][0]
+		r, err := j.MarshalJSON()
+		if err != nil {
+			panic(err)
+		}
 
-	fmt.Println("result is:", cq.Result)
+		s := string(r[:])
+		score, err := strconv.Atoi(s)
+		if err != nil {
+			panic(err)
+		}
+		//fmt.Println("score is:", score)
+		fmt.Println("connected main:", main, "related:", related, "score:", score)
+		return float64(score), nil
+	}
+	fmt.Println("failed to connect main:", main, "related:", related)
+
+	//fmt.Println("len result is too long:", result)
 	return 0, nil
-	//	return float64(res[0].strength), err
 }
 
 // helper function to load taxonomies from file

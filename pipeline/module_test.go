@@ -6,7 +6,6 @@ import (
 	"github.com/opinionated/pipeline/pipeline"
 	"github.com/opinionated/utils/config"
 	"os"
-	"testing"
 )
 
 // functions to help with testing pipeline stages
@@ -42,7 +41,11 @@ func BuildStoryFromFile(name, file string) pipeline.Story {
 
 // manages testing of a story, given the input and expected output
 // load the story you want it to drive, then build it from the file
-func StoryDriver(t *testing.T, inc chan pipeline.Story, output chan pipeline.Story, name string, done chan bool) {
+// errc is error chan reported back to runner
+// inc is the story input stream
+// output is the story output stream (where processed stories are written)
+// name is the config group name to pull the test set from
+func StoryDriver(errc chan error, inc chan pipeline.Story, output chan pipeline.Story, name string) {
 
 	// build the story to send down the pipe
 	story := pipeline.Story{}
@@ -101,7 +104,7 @@ func StoryDriver(t *testing.T, inc chan pipeline.Story, output chan pipeline.Sto
 		for article := range ostory.RelatedArticles {
 			if i >= len(arr) {
 				// make sure it doesn't go out of range
-				fmt.Printf("unexpected output for set %s: article %s is beyond test set\n",
+				errc <- fmt.Errorf("unexpected output for set %s: article %s is beyond test set\n",
 					name,
 					article.Name)
 				close(quit)
@@ -117,7 +120,7 @@ func StoryDriver(t *testing.T, inc chan pipeline.Story, output chan pipeline.Sto
 
 			if article.Name != str {
 				// compare expected and actual sets
-				t.Errorf("unexpected output for set %s: expected %s but got %s",
+				errc <- fmt.Errorf("unexpected output for set %s: expected %s but got %s",
 					name,
 					str,
 					article.Name)
@@ -127,7 +130,7 @@ func StoryDriver(t *testing.T, inc chan pipeline.Story, output chan pipeline.Sto
 		}
 
 		if i != len(arr) {
-			t.Errorf("failed to read all the expected inputs out of the pipe")
+			errc <- fmt.Errorf("failed to read all the expected inputs out of the pipe")
 		}
 		// finish up
 		close(quit)
@@ -135,5 +138,5 @@ func StoryDriver(t *testing.T, inc chan pipeline.Story, output chan pipeline.Sto
 
 	<-quit
 
-	close(done)
+	close(errc)
 }
