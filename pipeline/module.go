@@ -5,23 +5,20 @@ import (
 	"github.com/opinionated/analyzer-core/analyzer"
 )
 
-// type send through the pipeline
+// Story is passed through the pipeline.
 type Story struct {
 	MainArticle     analyzer.Analyzable
 	RelatedArticles chan analyzer.Analyzable
 }
 
-// a stage in the pipeline
-// the important thing here is to override the Analyze function with
-// your own analyze code
+// Module is a stage in the pipeline.
 type Module interface {
 	Setup()
 
-	// compare one related article to the main article
-	// return err, useAgain and moding the analyzable by reference
-	Analyze(analyzer.Analyzable, *analyzer.Analyzable) (error, bool)
-
-	// TODO: handle when the story changes
+	// Analyze is run on each article in a Story's related articles. It ranks
+	// the related article against the main article. This is the meat of each
+	// module.
+	Analyze(analyzer.Analyzable, *analyzer.Analyzable) (bool, error)
 
 	// up to each module to make sure the close happens properly
 	Close() error
@@ -30,6 +27,7 @@ type Module interface {
 	SetInputChan(chan Story)
 	getInputChan() chan Story
 
+	// get the story output channel
 	GetOutputChan() chan Story
 
 	// gets the closing stream
@@ -41,9 +39,8 @@ type Module interface {
 	getErrorPropogateChan() chan error
 }
 
-// manages input stream for a module
-// calls the module's Analyze function
-// pass the module in by reference
+// Run wraps story stream for a module, calling module.Analyze
+// on each related article in a story.
 func Run(m Module) {
 
 	// dummy error for now
@@ -79,7 +76,7 @@ func Run(m Module) {
 
 		// TODO: let this kick things out of the pipe, give errors
 		// TODO: handle errors
-		err, use := m.Analyze(main, &related)
+		use, err := m.Analyze(main, &related)
 
 		// TODO: set up to use err
 		if err != nil {
@@ -200,6 +197,7 @@ func Run(m Module) {
 
 			// close the chans we created
 			if analyzedStory.RelatedArticles != nil {
+				fmt.Println("closing related")
 				close(analyzedStory.RelatedArticles)
 			}
 

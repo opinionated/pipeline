@@ -6,7 +6,6 @@ import (
 	"github.com/opinionated/pipeline/pipeline"
 	"github.com/opinionated/utils/config"
 	"os"
-	"testing"
 )
 
 // functions to help with testing pipeline stages
@@ -42,7 +41,11 @@ func BuildStoryFromFile(name, file string) pipeline.Story {
 
 // manages testing of a story, given the input and expected output
 // load the story you want it to drive, then build it from the file
-func StoryDriver(t *testing.T, inc chan pipeline.Story, output chan pipeline.Story, name string, done chan bool) {
+// errc is error chan reported back to runner
+// inc is the story input stream
+// output is the story output stream (where processed stories are written)
+// name is the config group name to pull the test set from
+func StoryDriver(errc chan error, inc chan pipeline.Story, output chan pipeline.Story, name string) {
 
 	// build the story to send down the pipe
 	story := pipeline.Story{}
@@ -84,7 +87,9 @@ func StoryDriver(t *testing.T, inc chan pipeline.Story, output chan pipeline.Sto
 		defer close(story.RelatedArticles)
 	}()
 
-	// read the actual ouput and compare it to the expected
+	// read the actual output and compare it to the expected
+	// TODO: make proper error handling here... turns out t.Errorf won't break it
+	// seems like t.* needs to be used from main thread
 	quit := make(chan bool)
 	go func() {
 		ostory := <-output
@@ -97,39 +102,43 @@ func StoryDriver(t *testing.T, inc chan pipeline.Story, output chan pipeline.Sto
 		i := 0 // count along with expected
 
 		for article := range ostory.RelatedArticles {
-			if i > len(arr) {
+			if i >= len(arr) {
 				// make sure it doesn't go out of range
-				t.Errorf("unexpected output for set %s: article %s is beyond test set",
+				errc <- fmt.Errorf("unexpected output for set %s: article %s is beyond test set\n",
 					name,
 					article.Name)
+				close(quit)
+				return
 			}
-
 			fmt.Println("from pipe:", article.Name)
 			// convert arr to str
 			str, ok := arr[i].(string)
+
 			if !ok {
 				panic("error, could not convert output to string")
 			}
 
 			if article.Name != str {
 				// compare expected and actual sets
-				t.Errorf("unexpected output for set %s: expected %s but got %s",
+				errc <- fmt.Errorf("unexpected output for set %s: expected %s but got %s",
 					name,
 					str,
 					article.Name)
+				close(quit)
+				return
 			}
 
 			i++
 		}
 
 		if i != len(arr) {
-			t.Errorf("failed to read all the expected inputs out of the pipe")
+			fmt.Println("off by:", len(arr)-i)
+			errc <- fmt.Errorf("failed to read all the expected inputs out of the pipe")
 		}
 		// finish up
 		close(quit)
 	}()
 
 	<-quit
-
-	close(done)
+	close(errc)
 }

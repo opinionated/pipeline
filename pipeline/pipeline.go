@@ -5,14 +5,12 @@ import (
 	"sync"
 )
 
-// Pipeline manages a series of pipeline modules
+// Pipeline manages a series of pipeline modules.
 type Pipeline struct {
-	modules []Module
-	size    int
-
-	in   chan Story
-	errc chan error
-
+	modules      []Module
+	size         int
+	in           chan Story
+	errc         chan error
 	closeModules chan bool // treat this like a signal
 
 	// count how many running modules we have
@@ -20,7 +18,7 @@ type Pipeline struct {
 	wg sync.WaitGroup
 }
 
-// NewPipeline builds a new pipeline with the given number of stages
+// NewPipeline builds a new pipeline with the given number of stages.
 func NewPipeline(numStages int) *Pipeline {
 	p := &Pipeline{
 		modules:      make([]Module, numStages, numStages),
@@ -56,7 +54,7 @@ func (p *Pipeline) AddStage(m Module) {
 		m.SetInputChan(p.GetOutput())
 	}
 
-	// modules propogate errors up to the pipeline
+	// modules propagate errors up to the pipeline
 	m.SetErrorPropogateChan(p.errc)
 
 	p.modules[p.size] = m
