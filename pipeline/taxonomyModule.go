@@ -54,7 +54,7 @@ func (m *TaxonomyModule) Analyze(main analyzer.Analyzable,
 	}
 
 	// calculate score
-	str, err := m.rankTaxonomyAgainsMain(relatedTax)
+	str, err := m.rankTaxonomyAgainstMain(relatedTax)
 	if err != nil {
 		fmt.Println("got an err:", err)
 		return false, err
@@ -71,7 +71,7 @@ func (m *TaxonomyModule) Analyze(main analyzer.Analyzable,
 // Each main taxonomy is scored against each related taxonomy.
 // A relation score for each taxonomy pair is calculated from
 // the graph, then weighted by the taxonomy/article strength.
-func (m *TaxonomyModule) rankTaxonomyAgainsMain(related []alchemy.Taxonomy) (float64, error) {
+func (m *TaxonomyModule) rankTaxonomyAgainstMain(related []alchemy.Taxonomy) (float64, error) {
 
 	totalScore := 0.0
 
@@ -145,6 +145,7 @@ func (m *TaxonomyModule) getTaxonomyRelationStrength(main, related string) (floa
 	}
 
 	// if the results are filled, parse them
+	// TODO: do more legitimate parsing, this is probably unsafe
 	if len(result.Data) > 0 {
 		// read in the first (and only) element
 		rawMessage := result.Data[0][0]
