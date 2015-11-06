@@ -54,7 +54,7 @@ func (p *Pipeline) AddStage(m Module) {
 		m.SetInputChan(p.GetOutput())
 	}
 
-	// modules propogate errors up to the pipeline
+	// modules propagate errors up to the pipeline
 	m.SetErrorPropogateChan(p.errc)
 
 	p.modules[p.size] = m

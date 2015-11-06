@@ -87,7 +87,7 @@ func StoryDriver(errc chan error, inc chan pipeline.Story, output chan pipeline.
 		defer close(story.RelatedArticles)
 	}()
 
-	// read the actual ouput and compare it to the expected
+	// read the actual output and compare it to the expected
 	// TODO: make proper error handling here... turns out t.Errorf won't break it
 	// seems like t.* needs to be used from main thread
 	quit := make(chan bool)
