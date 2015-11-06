@@ -124,12 +124,15 @@ func StoryDriver(errc chan error, inc chan pipeline.Story, output chan pipeline.
 					name,
 					str,
 					article.Name)
+				close(quit)
+				return
 			}
 
 			i++
 		}
 
 		if i != len(arr) {
+			fmt.Println("off by:", len(arr)-i)
 			errc <- fmt.Errorf("failed to read all the expected inputs out of the pipe")
 		}
 		// finish up
@@ -137,6 +140,5 @@ func StoryDriver(errc chan error, inc chan pipeline.Story, output chan pipeline.
 	}()
 
 	<-quit
-
 	close(errc)
 }

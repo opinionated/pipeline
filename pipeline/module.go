@@ -197,6 +197,7 @@ func Run(m Module) {
 
 			// close the chans we created
 			if analyzedStory.RelatedArticles != nil {
+				fmt.Println("closing related")
 				close(analyzedStory.RelatedArticles)
 			}
 
