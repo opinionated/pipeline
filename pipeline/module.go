@@ -39,10 +39,16 @@ type Module interface {
 	getErrorPropogateChan() chan error
 }
 
+type analyzedResponse struct {
+	article analyzer.Analyzable
+	use     bool
+}
+
 // Run wraps story stream for a module, calling module.Analyze
 // on each related article in a story.
 func Run(m Module) {
 
+	fmt.Println("in run")
 	// dummy error for now
 	// TODO: decide if we want/need this
 	var err error
@@ -64,12 +70,8 @@ func Run(m Module) {
 	var analyzedArticle analyzer.Analyzable
 
 	// response type from article
-	type AnalyzedResponse struct {
-		article analyzer.Analyzable
-		use     bool
-	}
 
-	analyzed := make(chan AnalyzedResponse) // analyzed related articles
+	analyzed := make(chan analyzedResponse) // analyzed related articles
 
 	// wraps a call to analyze so we can do it async
 	doAnalyze := func(main, related analyzer.Analyzable) {
@@ -87,7 +89,7 @@ func Run(m Module) {
 			fmt.Println("WARNING: if upstream write depends on downstream read this will break")
 		}
 
-		response := AnalyzedResponse{related, use}
+		response := analyzedResponse{related, use}
 		// return or handle error/terminate
 		select {
 		case <-cancelAnalyze:
