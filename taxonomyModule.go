@@ -24,8 +24,9 @@ type TaxonomyModule struct {
 	mainTaxonomys  []alchemy.Taxonomy // holds main article's taxonomies
 	mainIdentifier string             // to check when article changes
 
-	// used to rank taxonomies against the main
-	taxonomyEngine TaxonomyEngine
+	// Use the neo4j graph to score taxonomies against eachother
+	db    *neoism.Database
+	cache Neo4jCache
 }
 
 // Analyze ranks articles by taxonomy.
