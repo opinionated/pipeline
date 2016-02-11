@@ -24,12 +24,8 @@ type TaxonomyModule struct {
 	mainTaxonomys  []alchemy.Taxonomy // holds main article's taxonomies
 	mainIdentifier string             // to check when article changes
 
-	// Use the neo4j graph database for relation between taxonomies.
-	// The graph is undirected, where nodes hold taxonomies and edges
-	// are relationships between two taxonomies. Edge weight is relation
-	// strength between each node.
-	db    *neoism.Database // db driver for neo4j graph db
-	cache Neo4jCache       // simple cache to store neo requests
+	// used to rank taxonomies against the main
+	taxonomyEngine TaxonomyEngine
 }
 
 // Analyze ranks articles by taxonomy.

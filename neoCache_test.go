@@ -1,7 +1,7 @@
 package pipeline_test
 
 import (
-	"github.com/opinionated/pipeline/pipeline"
+	"github.com/opinionated/pipeline"
 	"testing"
 )
 

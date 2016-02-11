@@ -3,7 +3,7 @@ package pipeline_test
 import (
 	"fmt"
 	"github.com/opinionated/analyzer-core/analyzer"
-	"github.com/opinionated/pipeline/pipeline"
+	"github.com/opinionated/pipeline"
 	"testing"
 )
 
