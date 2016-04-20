@@ -4,141 +4,119 @@ import (
 	"fmt"
 	"github.com/opinionated/analyzer-core/analyzer"
 	"github.com/opinionated/pipeline"
-	"github.com/opinionated/utils/config"
-	"os"
 )
 
-// functions to help with testing pipeline stages
-// does not have any actual tests of the modular pipeline
-// TODO: write tests for the run() function
+type testSet struct {
+	mainArticle      string
+	relatedArticles  []string
+	expectedArticles []string
+}
 
-func BuildStoryFromFile(name, file string) pipeline.Story {
-	f, err := os.Open(file)
-	defer f.Close()
+var neoTestSet = testSet{
+	mainArticle: "Guns, Anger and Nonsense in Oregon",
+	relatedArticles: []string{
+		"Gov. Christie Leaves Gun Controls Behind in New Jersey",
+		"A Bad Call on the Bergdahl Court-Martial",
+		"Agony and Starvation in the Syrian War",
+		"America’s Empty Embassies",
+		"An Appalling Silence on Gun Control",
+		"A New Cuban Exodus",
+		"A Pause to Weigh Risks of Gene Editing",
+		"A Shameful Round-Up of Refugees",
+		"At the Supreme Court, a Big Threat to Unions",
+		"Candidates’ Children in the Peanut Gallery",
+		"Connecticut’s Second-Chance Society",
+		"Course Correction for School Testing",
+		"Donald Trump Drags Bill Clinton’s Baggage Out",
+		"Don’t Change the Legal Rule on Intent",
+		"Extradite El Chapo Guzmán",
+		"For Grieving Families, Each Gun Massacre Echoes the Last",
+		"France’s Diminished Liberties",
+		"France’s State of Emergency",
+		"Getting Rid of Big Currency Notes Could Help Fight Crime",
+		"Gov. Cuomo’s Push on Justice Reform",
+		"Guns, Anger and Nonsense in Oregon",
+		"Hillary Clinton Should Just Say Yes to a $15 Minimum Wage",
+		"Horror Stories From New York State Prisons",
+		"Iraq and the Kurds Are Going Broke",
+		"Is Warfare in Our Bones?",
+		"Justice Antonin Scalia’s Supreme Court Legacy",
+		"Keep Guns Away From Abusers",
+		"Keeping the Lights On During a Dark Time",
+		"Kentucky’s Bizarre Attack on Health Reform",
+		"Making Choices in Iowa",
+		"Michigan’s Failure to Protect Flint",
+		"New Minimum Wages in the New Year",
+		"New Tensions Over the Iran Nuclear Deal",
+		"New York City Policing, by the Numbers",
+		"New York’s Humane Retreat From Solitary Confinement",
+		"New York’s ID Card Deserves Respect",
+		"No Justification for High Drug Prices",
+		"Pass Sentencing Reform",
+		"Put Reforms Into State Prison Guards’ Contract",
+		"The Counterfeit High School Diploma",
+	},
+}
 
-	if err != nil {
-		panic(err)
-	}
-
-	config.InitConfig()
-	err = config.ReadFile(name, f)
-
-	if err != nil {
-		panic(err)
-	}
+func storyFromSet(set testSet) pipeline.Story {
 
 	story := pipeline.Story{}
-	story.MainArticle = analyzer.Analyzable{}
-	story.MainArticle.Name = "main"
-	_, ok := config.From(name).Nested("inputSet").GetArray("related")
-	if !ok {
-		panic("could not convert to array")
+	story.MainArticle = analyzer.Analyzable{FileName: set.mainArticle}
+	story.RelatedArticles = make(chan analyzer.Analyzable)
 
-	}
+	go func() {
+
+		for i := range set.relatedArticles {
+			story.RelatedArticles <- analyzer.Analyzable{
+				FileName: set.relatedArticles[i],
+			}
+		}
+
+		close(story.RelatedArticles)
+
+	}()
 
 	return story
 }
 
-// manages testing of a story, given the input and expected output
-// load the story you want it to drive, then build it from the file
-// errc is error chan reported back to runner
-// inc is the story input stream
-// output is the story output stream (where processed stories are written)
-// name is the config group name to pull the test set from
-func StoryDriver(errc chan error, inc chan pipeline.Story, output chan pipeline.Story, name string) {
+// manages running a story
+func storyDriver(
+	pipe *pipeline.Pipeline,
+	story pipeline.Story) ([]analyzer.Analyzable, error) {
 
-	// build the story to send down the pipe
-	story := pipeline.Story{}
+	pipe.Start()
+	pipe.PushStory(story)
 
-	story.MainArticle = analyzer.Analyzable{}
-	input := config.From(name).Nested("inputSet")
-	mainName, ok := input.Get("main").(string)
-	if !ok {
-		panic("could not read main article name")
+	var result pipeline.Story
+
+	select {
+	case result = <-pipe.GetOutput():
+		break
+
+	case err := <-pipe.Error():
+		cerr := pipe.Close()
+		if cerr != nil {
+			err = fmt.Errorf("%s\n%s", err, cerr)
+		}
+		return nil, err
 	}
-	story.MainArticle.Name = mainName
-	story.MainArticle.FileName = "testData/" + mainName
 
-	story.RelatedArticles = make(chan analyzer.Analyzable)
+	related := make([]analyzer.Analyzable, 0)
 
-	// send it down k
-	inc <- story
-
-	// go feed the stories into the pipe
-	go func() {
-		// build the inputs
-		arr, ok := input.GetArray("related")
-
-		if !ok {
-			panic("could not convert input to array")
-		}
-
-		for _, link := range arr {
-			related := analyzer.Analyzable{}
-			str, ok := link.(string)
-			if !ok {
-				panic("error, could not convert type!")
+	for {
+		select {
+		case analyzed, open := <-result.RelatedArticles:
+			if !open {
+				return related, pipe.Close()
 			}
-			related.Name = str
-			related.FileName = "testData/" + str
-			fmt.Println("sending:", related.Name)
-			story.RelatedArticles <- related
-		}
-		defer close(story.RelatedArticles)
-	}()
+			related = append(related, analyzed)
 
-	// read the actual output and compare it to the expected
-	// TODO: make proper error handling here... turns out t.Errorf won't break it
-	// seems like t.* needs to be used from main thread
-	quit := make(chan bool)
-	go func() {
-		ostory := <-output
-		arr, ok := config.From(name).GetArray("output")
-
-		if !ok {
-			panic("could not convert output to array")
-		}
-
-		i := 0 // count along with expected
-
-		for article := range ostory.RelatedArticles {
-			if i >= len(arr) {
-				// make sure it doesn't go out of range
-				errc <- fmt.Errorf("unexpected output for set %s: article %s is beyond test set\n",
-					name,
-					article.Name)
-				close(quit)
-				return
+		case err := <-pipe.Error():
+			cerr := pipe.Close()
+			if cerr != nil {
+				err = fmt.Errorf("%s\n%s", err, cerr)
 			}
-			fmt.Println("from pipe:", article.Name)
-			// convert arr to str
-			str, ok := arr[i].(string)
-
-			if !ok {
-				panic("error, could not convert output to string")
-			}
-
-			if article.Name != str {
-				// compare expected and actual sets
-				errc <- fmt.Errorf("unexpected output for set %s: expected %s but got %s",
-					name,
-					str,
-					article.Name)
-				close(quit)
-				return
-			}
-
-			i++
+			return nil, err
 		}
-
-		if i != len(arr) {
-			fmt.Println("off by:", len(arr)-i)
-			errc <- fmt.Errorf("failed to read all the expected inputs out of the pipe")
-		}
-		// finish up
-		close(quit)
-	}()
-
-	<-quit
-	close(errc)
+	}
 }

@@ -2,54 +2,34 @@ package pipeline
 
 import (
 	"fmt"
-	"sync"
 )
 
 // Pipeline manages a series of pipeline modules.
 type Pipeline struct {
-	modules      []Module
-	size         int
-	in           chan Story
-	errc         chan error
-	closeModules chan bool // treat this like a signal
-
-	// count how many running modules we have
-	// use to make sure all modules get closed cleanly
-	wg sync.WaitGroup
+	modules     []Module
+	errc        chan error
+	closeSignal chan struct{} // treat this like a signal
 }
 
 // NewPipeline builds a new pipeline with the given number of stages.
-func NewPipeline(numStages int) *Pipeline {
+func NewPipeline() *Pipeline {
 	p := &Pipeline{
-		modules:      make([]Module, numStages, numStages),
-		size:         0,
-		errc:         make(chan error),
-		closeModules: make(chan bool),
+		modules:     make([]Module, 0, 1),
+		errc:        make(chan error),
+		closeSignal: make(chan struct{}),
 	}
+
 	return p
-}
-
-// SetInput sets the pipeline input chan
-// expected to run this before the thing is set up
-func (p *Pipeline) SetInput(inc chan Story) {
-	if len(p.modules) > 0 {
-		//panic("going to set input before pipeline gets built")
-	}
-
-	p.in = inc
 }
 
 // AddStage adds a new module, assumes that the module has not been set up yet
 func (p *Pipeline) AddStage(m Module) {
-	if p.size == cap(p.modules) {
-		panic("added more modules than expected... going beyond cap")
-	}
-
 	m.Setup()
 
-	if p.size == 0 {
-		// if first element
-		m.SetInputChan(p.in)
+	size := len(p.modules)
+
+	if size == 0 {
+		m.SetInputChan(make(chan Story))
 	} else {
 		m.SetInputChan(p.GetOutput())
 	}
@@ -57,64 +37,66 @@ func (p *Pipeline) AddStage(m Module) {
 	// modules propagate errors up to the pipeline
 	m.SetErrorPropogateChan(p.errc)
 
-	p.modules[p.size] = m
-	p.size = p.size + 1
+	p.modules = append(p.modules, m)
+}
+
+// PushStory to the pipeline
+// blocks until the story hits the pipeline (or the buffer)
+func (p *Pipeline) PushStory(story Story) {
+	p.modules[0].getInputChan() <- story
 }
 
 // GetOutput returns the final output chan of the pipeline
+// not thread safe
 func (p *Pipeline) GetOutput() chan Story {
-	if p.size == 0 {
-		panic("tried getting output of nil")
-	}
-
-	return p.modules[p.size-1].GetOutputChan()
+	return p.modules[len(p.modules)-1].GetOutputChan()
 }
 
 // Start the pipeline
 func (p *Pipeline) Start() {
-	if p.size == 0 {
-		panic("tring to run an empty pipe")
-	}
 
-	for _, m := range p.modules {
+	for i := range p.modules {
+		go Run(p.modules[i])
 
-		p.wg.Add(1)
-		go p.runStage(m, p.closeModules)
 	}
 
 	go p.run()
 }
 
 func (p *Pipeline) run() {
+
 	// wait until pipeline gets closed or a module has a big error
 	select {
 	case err := <-p.errc:
 		fmt.Println("pipeline is not set up to handle big errors yet")
 		panic(err)
-	case <-p.closeModules:
 
+	case <-p.closeSignal:
 	}
 }
 
-// Stop the pipeline
-func (p *Pipeline) Stop() {
-	// use the closeModules chan as a signal
-	close(p.closeModules)
-
-	// don't finish until all modules close
-	p.wg.Wait()
+// Error on the pipeline
+func (p *Pipeline) Error() <-chan error {
+	return p.errc
 }
 
-// run a stage of the module, called by the pipeline
-// m is the module to be run and is already all hooked up, is a reference
-// terminate stops the stage from running
-func (p *Pipeline) runStage(m Module, terminate chan bool) {
-	go Run(m)
+// Close the pipeline
+func (p *Pipeline) Close() error {
+	close(p.closeSignal)
 
-	// wait for close signal
-	<-terminate
-	m.Close()
+	// go close all the individual modules
+	var err error
+	for i := range p.modules {
+		merr := p.modules[i].Close()
 
-	// decrease open module count
-	p.wg.Done()
+		if merr != nil {
+			if err != nil {
+				err = fmt.Errorf("Error(s) closing pipeline:")
+			}
+
+			err = fmt.Errorf("%s\n\t%s", err.Error(), merr.Error())
+		}
+	}
+
+	return err
 }

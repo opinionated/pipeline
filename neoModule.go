@@ -17,6 +17,11 @@ type NeoModule struct {
 	metadataType string
 }
 
+// ScoreSimpleMul just multiplies two commands together
+func ScoreSimpleMul(flow float32, count int) float32 {
+	return flow * float32(count)
+}
+
 // SetParams sets the variables used for the module
 // TODO: think about any more params
 func (m *NeoModule) SetParams(metadataType string, scoreFunc func(float32, int) float32) {
@@ -24,7 +29,7 @@ func (m *NeoModule) SetParams(metadataType string, scoreFunc func(float32, int) 
 	m.scoreFunc = scoreFunc
 }
 
-// Analyze _____.
+// Analyze via the relation database.
 func (m *NeoModule) Analyze(main analyzer.Analyzable,
 	related *analyzer.Analyzable) (bool, error) {
 
@@ -39,7 +44,11 @@ func (m *NeoModule) Analyze(main analyzer.Analyzable,
 
 // Setup tries to open the relation db.
 func (m *NeoModule) Setup() {
-	relationDB.Open("localhost:7474")
+	err := relationDB.Open("http://localhost:7474")
+	if err != nil {
+		// TODO: better error handling
+		panic(err)
+	}
 
 	m.out = make(chan Story, 1)
 	m.closing = make(chan chan error)
