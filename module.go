@@ -72,6 +72,8 @@ func Run(m Module) {
 	// response type from article
 
 	analyzed := make(chan analyzedResponse) // analyzed related articles
+	var analyzedtmp chan analyzedResponse
+	analyzedtmp = analyzed
 
 	// wraps a call to analyze so we can do it async
 	doAnalyze := func(main, related analyzer.Analyzable) {
@@ -99,6 +101,9 @@ func Run(m Module) {
 		case analyzed <- response:
 		}
 	}
+
+	// nil it so we don't read unless we actually have something to read
+	analyzed = nil
 
 	for {
 
@@ -155,11 +160,13 @@ func Run(m Module) {
 
 			// don't read a new article until we analyze this one
 			relatedIn = nil
+			analyzed = analyzedtmp
 
 			// TODO: look into staging this all better
 			go doAnalyze(currentStory.MainArticle, next)
 
 		case analyzedResponse := <-analyzed:
+			analyzed = nil
 
 			if analyzedResponse.use {
 

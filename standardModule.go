@@ -4,6 +4,12 @@ import (
 	"github.com/opinionated/analyzer-core/analyzer"
 )
 
+// StandardModuleAnalyzer can be plugged into the standard module
+type StandardModuleAnalyzer interface {
+	Analyze(analyzer.Analyzable, *analyzer.Analyzable) (bool, error)
+	Setup() error
+}
+
 // StandardModule takes functions as parameters and uses those to adjust behavior.
 // For most analysis this should be totally fine
 type StandardModule struct {
@@ -12,24 +18,19 @@ type StandardModule struct {
 	err     chan error
 	closing chan chan error
 
-	analyzeFunc func(analyzer.Analyzable, *analyzer.Analyzable) (bool, error)
-	setupFunc   func() error
+	sma StandardModuleAnalyzer
 }
 
 // SetFuncs used by the standard module
-func (m *StandardModule) SetFuncs(
-	analyzeFunc func(analyzer.Analyzable, *analyzer.Analyzable) (bool, error),
-	setupFunc func() error) {
-
-	m.analyzeFunc = analyzeFunc
-	m.setupFunc = setupFunc
+func (m *StandardModule) SetFuncs(sma StandardModuleAnalyzer) {
+	m.sma = sma
 }
 
 // Analyze falls through to the analyze fun.
 func (m *StandardModule) Analyze(main analyzer.Analyzable,
 	related *analyzer.Analyzable) (bool, error) {
 
-	return m.analyzeFunc(main, related)
+	return m.sma.Analyze(main, related)
 }
 
 // Setup does normal setup and calls the setup func.
@@ -37,7 +38,7 @@ func (m *StandardModule) Setup() {
 	m.out = make(chan Story, 1)
 	m.closing = make(chan chan error)
 
-	if err := m.setupFunc(); err != nil {
+	if err := m.sma.Setup(); err != nil {
 		panic(err)
 	}
 }
