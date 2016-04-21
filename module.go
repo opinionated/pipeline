@@ -51,7 +51,7 @@ func Run(m Module) {
 	fmt.Println("in run")
 	// dummy error for now
 	// TODO: decide if we want/need this
-	var err error
+	var merr error
 
 	// tmp chans for story in/out stream
 	inputStream := m.getInputChan()
@@ -84,7 +84,13 @@ func Run(m Module) {
 
 		// TODO: set up to use err
 		if err != nil {
-			panic(err)
+			merr = err
+
+			select {
+			case m.getErrorPropogateChan() <- err:
+			case <-cancelAnalyze:
+			}
+			return
 		}
 
 		if !use {
@@ -211,7 +217,7 @@ func Run(m Module) {
 			}
 
 			// send the error down stream and exit
-			errc <- err
+			errc <- merr
 			return
 
 		} // end select

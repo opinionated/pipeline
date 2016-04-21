@@ -1,7 +1,6 @@
 package pipeline_test
 
 import (
-	"fmt"
 	"github.com/opinionated/analyzer-core/analyzer"
 	"github.com/opinionated/pipeline"
 )
@@ -93,11 +92,9 @@ func storyDriver(
 	case result = <-pipe.GetOutput():
 		break
 
-	case err := <-pipe.Error():
-		cerr := pipe.Close()
-		if cerr != nil {
-			err = fmt.Errorf("%s\n%s", err, cerr)
-		}
+	case <-pipe.Error():
+		// go get the error when you actually close the pipe
+		err := pipe.Close()
 		return nil, err
 	}
 
@@ -111,11 +108,9 @@ func storyDriver(
 			}
 			related = append(related, analyzed)
 
-		case err := <-pipe.Error():
-			cerr := pipe.Close()
-			if cerr != nil {
-				err = fmt.Errorf("%s\n%s", err, cerr)
-			}
+		case <-pipe.Error():
+			// get the error when you close the pipe
+			err := pipe.Close()
 			return nil, err
 		}
 	}

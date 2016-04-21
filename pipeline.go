@@ -2,13 +2,16 @@ package pipeline
 
 import (
 	"fmt"
+	"sync"
 )
 
 // Pipeline manages a series of pipeline modules.
 type Pipeline struct {
 	modules     []Module
 	errc        chan error
+	externc     chan error
 	closeSignal chan struct{} // treat this like a signal
+	closeOnce   *sync.Once
 }
 
 // NewPipeline builds a new pipeline with the given number of stages.
@@ -16,7 +19,9 @@ func NewPipeline() *Pipeline {
 	p := &Pipeline{
 		modules:     make([]Module, 0, 1),
 		errc:        make(chan error),
+		externc:     make(chan error),
 		closeSignal: make(chan struct{}),
+		closeOnce:   new(sync.Once),
 	}
 
 	return p
@@ -63,26 +68,33 @@ func (p *Pipeline) Start() {
 	go p.run()
 }
 
+func (p *Pipeline) doClose() {
+	close(p.closeSignal)
+}
+
 func (p *Pipeline) run() {
 
 	// wait until pipeline gets closed or a module has a big error
 	select {
 	case err := <-p.errc:
-		fmt.Println("pipeline is not set up to handle big errors yet")
-		panic(err)
+		fmt.Println("got err:", err)
+		// signal that something bad happened
+		p.closeOnce.Do(p.doClose)
+
+		return
 
 	case <-p.closeSignal:
 	}
 }
 
-// Error on the pipeline
-func (p *Pipeline) Error() <-chan error {
-	return p.errc
+// Error on the pipeline closes this signal
+func (p *Pipeline) Error() <-chan struct{} {
+	return p.closeSignal
 }
 
 // Close the pipeline
 func (p *Pipeline) Close() error {
-	close(p.closeSignal)
+	p.closeOnce.Do(p.doClose)
 
 	// go close all the individual modules
 	var err error
@@ -90,7 +102,7 @@ func (p *Pipeline) Close() error {
 		merr := p.modules[i].Close()
 
 		if merr != nil {
-			if err != nil {
+			if err == nil {
 				err = fmt.Errorf("Error(s) closing pipeline:")
 			}
 

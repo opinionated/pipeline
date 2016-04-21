@@ -130,5 +130,6 @@ func TestError(t *testing.T) {
 	data, err := storyDriver(pipe, story)
 
 	assert.NotNil(t, err)
+	assert.EqualError(t, err, "Error(s) closing pipeline:\n\tok bump!")
 	assert.Len(t, data, 0)
 }
