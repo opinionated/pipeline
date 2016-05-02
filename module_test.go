@@ -312,9 +312,13 @@ func TestFull(t *testing.T) {
 	lastThreshModule := pipeline.StandardModule{}
 	lastThreshModule.SetFuncs(&lastThreshFunc)
 
-	keyFunc := neoAverageAnalyzer{metadataType: "Keyword", weight: 5.0}
+	keyFunc := neoAverageAnalyzer{metadataType: "Keyword", weight: 3.0}
 	keyModule := pipeline.StandardModule{}
 	keyModule.SetFuncs(&keyFunc)
+
+	entityFunc := neoAverageAnalyzer{metadataType: "Entity", weight: 2.0}
+	entityModule := pipeline.StandardModule{}
+	entityModule.SetFuncs(&entityFunc)
 
 	// build the pipe
 	pipe := pipeline.NewPipeline()
@@ -327,6 +331,7 @@ func TestFull(t *testing.T) {
 	//pipe.AddStage(&threshModule)
 	//pipe.AddStage(&lastThreshModule)
 	pipe.AddStage(&keyModule)
+	pipe.AddStage(&entityModule)
 
 	// build the story
 	assert.Nil(t, relationDB.Open("http://localhost:7474"))
@@ -336,7 +341,7 @@ func TestFull(t *testing.T) {
 	assert.True(t, len(articles) > 150)
 
 	set := testSet{
-		mainArticle:     "The Horror in San Bernardino",
+		mainArticle:     "Ted ‘Carpet-Bomb’ Cruz",
 		relatedArticles: articles,
 	}
 
