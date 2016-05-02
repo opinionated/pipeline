@@ -39,13 +39,19 @@ type Module interface {
 	getErrorPropogateChan() chan error
 }
 
+type analyzedResponse struct {
+	article analyzer.Analyzable
+	use     bool
+}
+
 // Run wraps story stream for a module, calling module.Analyze
 // on each related article in a story.
 func Run(m Module) {
 
+	fmt.Println("in run")
 	// dummy error for now
 	// TODO: decide if we want/need this
-	var err error
+	var merr error
 
 	// tmp chans for story in/out stream
 	inputStream := m.getInputChan()
@@ -64,12 +70,10 @@ func Run(m Module) {
 	var analyzedArticle analyzer.Analyzable
 
 	// response type from article
-	type AnalyzedResponse struct {
-		article analyzer.Analyzable
-		use     bool
-	}
 
-	analyzed := make(chan AnalyzedResponse) // analyzed related articles
+	analyzed := make(chan analyzedResponse) // analyzed related articles
+	var analyzedtmp chan analyzedResponse
+	analyzedtmp = analyzed
 
 	// wraps a call to analyze so we can do it async
 	doAnalyze := func(main, related analyzer.Analyzable) {
@@ -80,14 +84,20 @@ func Run(m Module) {
 
 		// TODO: set up to use err
 		if err != nil {
-			panic(err)
+			merr = err
+
+			select {
+			case m.getErrorPropogateChan() <- err:
+			case <-cancelAnalyze:
+			}
+			return
 		}
 
 		if !use {
 			fmt.Println("WARNING: if upstream write depends on downstream read this will break")
 		}
 
-		response := AnalyzedResponse{related, use}
+		response := analyzedResponse{related, use}
 		// return or handle error/terminate
 		select {
 		case <-cancelAnalyze:
@@ -97,6 +107,9 @@ func Run(m Module) {
 		case analyzed <- response:
 		}
 	}
+
+	// nil it so we don't read unless we actually have something to read
+	analyzed = nil
 
 	for {
 
@@ -153,11 +166,13 @@ func Run(m Module) {
 
 			// don't read a new article until we analyze this one
 			relatedIn = nil
+			analyzed = analyzedtmp
 
 			// TODO: look into staging this all better
 			go doAnalyze(currentStory.MainArticle, next)
 
 		case analyzedResponse := <-analyzed:
+			analyzed = nil
 
 			if analyzedResponse.use {
 
@@ -202,7 +217,7 @@ func Run(m Module) {
 			}
 
 			// send the error down stream and exit
-			errc <- err
+			errc <- merr
 			return
 
 		} // end select

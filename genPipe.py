@@ -24,14 +24,18 @@ def CreateSimplePipe(name):
     WriteAnalyze(fd, name)
     WriteSetup(fd, name)
     WriteClose(fd, name)
+
     WriteSetInputChan(fd, name)
     WriteGetOutputChan(fd, name)
     WriteSetErrorChan(fd, name)
+
+    WriteEndMethods(fd, name)
+
     WriteFooter(fd, name)
   
 def WriteAnalyze(fd, name):
     fd.write('// Analyze _____.\n')
-    fd.write('func (m *' + name + ') Analyze (main analyzer.Analyzable,\n' +
+    fd.write('func (m *' + name +'Module) Analyze (main analyzer.Analyzable,\n' +
             'related *analyzer.Analyzable) (bool, error) {\n')
     fd.write("\n return true, nil\n")
     fd.write('}\n\n')
@@ -39,7 +43,7 @@ def WriteAnalyze(fd, name):
 def WriteSetup(fd, name):
     fd.write("// Setup _______.\n")
     WriteFuncHeader(fd, name, 'Setup', '')
-    fd.write('m.out = make(chan AnalyzableStory, 1)\n')
+    fd.write('m.out = make(chan Story, 1)\n')
     fd.write('m.closing = make(chan chan error)\n')
     fd.write('}\n\n')
 
@@ -53,15 +57,22 @@ def WriteClose(fd, name):
 
 def WriteSetInputChan(fd, name):
     fd.write("// SetInputChan sets the module's input channel.\n")
-    WriteFuncHeader(fd, name, 'SetInputChan', 'inc chan AnalyzableStory')
+    WriteFuncHeader(fd, name, 'SetInputChan', 'inc chan Story')
     fd.write('m.in = inc\n')
     fd.write('}\n\n')
 
 def WriteGetOutputChan(fd, name):
     fd.write('// GetOutputChan returns the modules output channel.\n')
-    fd.write('func (m *' + name + 'Module) GetOutputChan() chan AnalyzableStory {\n')
+    fd.write('func (m *' + name + 'Module) GetOutputChan() chan Story {\n')
     fd.write('return m.out\n')
     fd.write('}\n\n')
+
+def WriteGetClose(fd, name):
+    fd.write('// getClose is used internally\n')
+    fd.write('func (m *' + name + 'Module) getClose() chan chan error {\n')
+    fd.write('return m.closing\n')
+    fd.write('}\n')
+
 
 def WriteSetErrorChan(fd, name):
     fd.write('// SetErrorPropogateChan sets the channel for errors to propagate out\n')
@@ -98,8 +109,8 @@ def WriteHeader(fd, name):
 def WriteStruct(fd, name):
     fd.write('// ' + name + 'Module _______.\n')
     fd.write('type ' + name + 'Module struct {\n')
-    fd.write('in\tchan\tAnalyzableStory\n')
-    fd.write('out\tchan\tAnalyzableStory\n')
+    fd.write('in\tchan\tStory\n')
+    fd.write('out\tchan\tStory\n')
 
     fd.write('err\tchan\terror\n')
 
