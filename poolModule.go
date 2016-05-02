@@ -11,7 +11,7 @@ import (
 // practice it will be longer because it needs to read and
 // process all the articles (at nlogn) then send them down
 // stream at n.
-
+//
 // This is not staged as well as it could be. Buffered chans
 // may help. Examples are not processing articles when waiting
 // for a reader, not analyzing while waiting for pipe to open
@@ -29,8 +29,8 @@ type PoolModule struct {
 	capacity int
 }
 
+// SetCapacity for how many items can be stored in the pool
 func (m *PoolModule) SetCapacity(capacity int) {
-
 	m.capacity = capacity
 	m.heap = make(analyzer.Heap, 0)
 	fmt.Println("made heap")
@@ -41,6 +41,9 @@ func (m *PoolModule) SetCapacity(capacity int) {
 // RunPool is a special run method for this module.
 // TODO: make sure this stays up to date with the normal run
 func RunPool(m *PoolModule) {
+	if 1 == 1 {
+		panic("hey hey")
+	}
 
 	// dummy error for now
 	// TODO: decide if we want/need this
@@ -109,6 +112,7 @@ func RunPool(m *PoolModule) {
 				// TODO: make some way to handle it
 				break
 			}
+			fmt.Println("got new story")
 
 			currentStory = nextStory
 
@@ -150,8 +154,10 @@ func RunPool(m *PoolModule) {
 				break
 			}
 
+			fmt.Println("adding to head!")
 			// add items to the heap
 			if m.heap.Len() == m.capacity {
+				fmt.Println("adding to head!")
 				if m.heap.Peek().Score < next.Score {
 					// only add at capacity if this element is bigger
 					// than the lowest in the heap

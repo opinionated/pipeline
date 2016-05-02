@@ -1,88 +1,36 @@
 package pipeline_test
 
-/*
 import (
-	"fmt"
 	"github.com/opinionated/analyzer-core/analyzer"
 	"github.com/opinionated/pipeline"
+	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
 func TestPoolCuttoff(t *testing.T) {
+	poolModule := pipeline.PoolModule{}
+	poolModule.SetCapacity(2)
 
-	// analyzable factory
-	m := func(name string, score float64) analyzer.Analyzable {
-		analyzable := analyzer.BuildAnalyzable()
-		analyzable.Name = name
-		analyzable.Score = score
-		return analyzable
+	pipe := pipeline.NewPipeline()
+	pipe.AddStage(&poolModule)
+
+	story := pipeline.Story{
+		MainArticle:     analyzer.Analyzable{Name: "main"},
+		RelatedArticles: make(chan analyzer.Analyzable, 5),
 	}
 
-	// in/out sets
-	// the heap will only grab the highest values
-	inputArticles := []analyzer.Analyzable{m("d", 4.0), m("a", 0.1), m("b", 2.0), m("c", 0.2)}
-	outputArticles := []analyzer.Analyzable{m("b", 0.0), m("d", 0.0)}
+	story.RelatedArticles <- analyzer.Analyzable{Name: "a", Score: 1.5}
+	story.RelatedArticles <- analyzer.Analyzable{Name: "b", Score: 2.5}
+	story.RelatedArticles <- analyzer.Analyzable{Name: "c", Score: 3.5}
+	story.RelatedArticles <- analyzer.Analyzable{Name: "d", Score: 4.5}
+	close(story.RelatedArticles)
 
-	// build the cut module
-	cut := pipeline.PoolModule{}
-	cut.Setup()
-	cut.SetCapacity(2)
+	data, err := storyDriver(pipe, story)
 
-	inc := make(chan pipeline.Story)
-	cut.SetInputChan(inc)
-	cut.SetErrorPropogateChan(make(chan error))
+	assert.Nil(t, err)
+	assert.NotNil(t, data)
+	assert.Len(t, data, 2)
 
-	// needs a special run because it behaves differently
-	go pipeline.RunPool(&cut)
-
-	// build the input story
-	inputStory := pipeline.Story{}
-	inputStory.MainArticle = analyzer.Analyzable{}
-	inputStory.MainArticle.Name = "test"
-
-	inputStory.RelatedArticles = make(chan analyzer.Analyzable)
-
-	inc <- inputStory
-
-	done := make(chan error)
-
-	// send input articles
-	go func() {
-		for _, article := range inputArticles {
-			fmt.Println("sending:", article.Name)
-			inputStory.RelatedArticles <- article
-		}
-		close(inputStory.RelatedArticles)
-	}()
-
-	// read output articles
-	go func() {
-		outStory := <-cut.GetOutputChan()
-
-		i := 0 // tracks # articles read
-		for _, expected := range outputArticles {
-
-			result := <-outStory.RelatedArticles
-			if result.Name != expected.Name {
-				done <- fmt.Errorf("cutoff error, expected: %s got: %s", expected.Name, result.Name)
-			}
-			i++
-		}
-
-		if i != len(outputArticles) {
-			done <- fmt.Errorf("pool error, did not get all expected articles back!")
-		}
-
-		// signal done
-		close(done)
-	}()
-
-	// print any errors
-	for err := range done {
-		t.Errorf("%s\n", err)
-	}
-
-	cut.Close()
-
+	assert.Equal(t, "d", data[0].Name)
+	assert.Equal(t, "c", data[1].Name)
 }
-*/

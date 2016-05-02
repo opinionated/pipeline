@@ -1,12 +1,12 @@
 package pipeline_test
 
 import (
+	"container/heap"
 	"fmt"
 	"github.com/opinionated/analyzer-core/analyzer"
 	"github.com/opinionated/analyzer-core/dbInterface"
 	"github.com/opinionated/pipeline"
 	"github.com/stretchr/testify/assert"
-	"math"
 	"testing"
 )
 
@@ -186,9 +186,39 @@ func storyDriver(
 	}
 }
 
+// only gets the top #num articles from the articles list
+func heapFilter(articles []analyzer.Analyzable, num int) []analyzer.Analyzable {
+	mheap := make(analyzer.Heap, 0)
+	if mheap == nil {
+		panic("oh nose, nil heap!")
+	}
+
+	fmt.Println("made it!")
+	heap.Init(&mheap)
+
+	for i := range articles {
+		if mheap.Len() == num {
+			if articles[i].Score > mheap.Peek().Score {
+				heap.Pop(&mheap)
+				heap.Push(&mheap, &articles[i])
+			}
+		} else {
+			heap.Push(&mheap, &articles[i])
+		}
+	}
+
+	ret := make([]analyzer.Analyzable, num)
+	for i := 0; i < num; i++ {
+		ret[i] = *heap.Pop(&mheap).(*analyzer.Analyzable)
+	}
+
+	return ret
+}
+
 // for the full test
 type neoAnalyzer struct {
 	metadataType string
+	weight       float64
 }
 
 func (na neoAnalyzer) Setup() error {
@@ -211,10 +241,40 @@ func (na neoAnalyzer) Analyze(main analyzer.Analyzable,
 		return false, err
 	}
 
-	// sqrt(flow) * count^2
-	// use sqrt to pull up things with low scores
-	// reward things with high count
-	related.Score += math.Sqrt(float64(flow)) * float64(count*count)
+	related.Score += na.weight * float64(flow) * float64(count*count)
+	return true, nil
+
+}
+
+// better than the square for things with lots of connections
+type neoAverageAnalyzer struct {
+	metadataType string
+	weight       float64
+}
+
+func (na neoAverageAnalyzer) Setup() error {
+	err := relationDB.Open("http://localhost:7474")
+	if err != nil {
+		panic(err)
+	}
+	return nil
+}
+
+func (na neoAverageAnalyzer) Analyze(main analyzer.Analyzable,
+	related *analyzer.Analyzable) (bool, error) {
+
+	flow, count, err := relationDB.StrengthBetween(
+		main.FileName,
+		related.FileName,
+		na.metadataType)
+
+	if err != nil {
+		return false, err
+	}
+
+	if count > 0 {
+		related.Score += na.weight * float64(flow) / float64(count)
+	}
 	return true, nil
 
 }
@@ -233,34 +293,61 @@ func (ta threshAnalyzer) Analyze(main analyzer.Analyzable,
 	}
 	return false, nil
 }
+
 func TestFull(t *testing.T) {
 
-	taxFunc := neoAnalyzer{metadataType: "Taxonomy"}
+	taxFunc := neoAnalyzer{metadataType: "Taxonomy", weight: 3.0}
 	taxModule := pipeline.StandardModule{}
 	taxModule.SetFuncs(&taxFunc)
 
-	threshFunc := threshAnalyzer{threshhold: 0.3}
+	threshFunc := threshAnalyzer{threshhold: 1.0}
 	threshModule := pipeline.StandardModule{}
 	threshModule.SetFuncs(&threshFunc)
 
-	keyFunc := neoAnalyzer{metadataType: "Keywords"}
-	keyModule := pipeline.StandardModule{}
-	keyModule.SetFuncs(&keyFunc)
+	conceptsFunc := neoAnalyzer{metadataType: "Concept", weight: 4.0}
+	conceptsModule := pipeline.StandardModule{}
+	conceptsModule.SetFuncs(&conceptsFunc)
 
 	lastThreshFunc := threshAnalyzer{threshhold: 1.0}
 	lastThreshModule := pipeline.StandardModule{}
 	lastThreshModule.SetFuncs(&lastThreshFunc)
 
+	keyFunc := neoAverageAnalyzer{metadataType: "Keyword", weight: 5.0}
+	keyModule := pipeline.StandardModule{}
+	keyModule.SetFuncs(&keyFunc)
+
 	// build the pipe
 	pipe := pipeline.NewPipeline()
-	pipe.AddStage(&taxModule)
-	pipe.AddStage(&threshModule)
-	pipe.AddStage(&keyModule)
-	pipe.AddStage(&lastThreshModule)
 
-	story := storyFromSet(terrorTestSet)
+	// do coarse methods
+	pipe.AddStage(&taxModule)
+	pipe.AddStage(&conceptsModule)
+
+	// thresh then do finer methods
+	//pipe.AddStage(&threshModule)
+	//pipe.AddStage(&lastThreshModule)
+	pipe.AddStage(&keyModule)
+
+	// build the story
+	assert.Nil(t, relationDB.Open("http://localhost:7474"))
+	articles, err := relationDB.GetAll()
+
+	assert.Nil(t, err)
+	assert.True(t, len(articles) > 150)
+
+	set := testSet{
+		mainArticle:     "The Horror in San Bernardino",
+		relatedArticles: articles,
+	}
+
+	story := storyFromSet(set)
 	fmt.Println(story.MainArticle.FileName)
-	data, err := storyDriver(pipe, story)
+
+	raw, err := storyDriver(pipe, story)
+	data := heapFilter(raw, 20)
+	//data, err := storyDriver(pipe, story)
+
+	// only get the top couple of articles
 
 	assert.Nil(t, err)
 	fmt.Println("main:", story.MainArticle.FileName)
