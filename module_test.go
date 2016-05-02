@@ -1,8 +1,13 @@
 package pipeline_test
 
 import (
+	"fmt"
 	"github.com/opinionated/analyzer-core/analyzer"
+	"github.com/opinionated/analyzer-core/dbInterface"
 	"github.com/opinionated/pipeline"
+	"github.com/stretchr/testify/assert"
+	"math"
+	"testing"
 )
 
 type testSet struct {
@@ -11,8 +16,73 @@ type testSet struct {
 	expectedArticles []string
 }
 
+var terrorTestSet = testSet{
+	mainArticle: "Ted ‘Carpet-Bomb’ Cruz",
+	relatedArticles: []string{
+		"The Horror in San Bernardino",
+		"A BAD CALL ON THE BERGDAHL COURT-MARTIAL",
+		"A BETTER SAFEGUARD AGAINST THREATS FROM ABROAD",
+		"A COLLEGE EDUCATION FOR PRISONERS",
+		"A CONSTITUTIONAL STANDOFF IN VENEZUELA",
+		"A Fearful Congress Sits Out the War Against ISIS",
+		"Agony and Starvation in the Syrian War",
+		"A Maid’s Peaceful Rebellion in Colombia",
+		"America and Its Fellow Executioners",
+		"America’s Empty Embassies",
+		"A Misguided Plan for Carriage Horses",
+		"An Important Win in the Supreme Court for Class Actions",
+		"An Opening for States to Restrict Guns",
+		"A Pause to Weigh Risks of Gene Editing",
+		"A Safer World, Thanks to the Iran Deal ",
+		"A Shameful Round-Up of Refugees",
+		"Canada’s Warm Embrace of Refugees",
+		"Connecticut’s Second-Chance Society",
+		"Despair Over Gun Deaths Is Not an Option",
+		"Doubts About Saudi Arabia’s Antiterrorism Coalition",
+		"Extradite El Chapo Guzmán",
+		"France’s Diminished Liberties",
+		"France’s State of Emergency",
+		"Gov. Cuomo’s Burden on Ethics",
+		"Gunmakers’ War Profiteering on the Home Front",
+		"Guns, Anger and Nonsense in Oregon",
+		"How to Help the Syrians Who Want to Return Home",
+		"India and Pakistan Try Again",
+		"In France, the Political Fruits of Fear",
+		"In Venezuela, a Triumph for the Opposition",
+		"Iran’s Hard-Liners Cling to the Past",
+		"Iran’s Other Scary Weapons Program",
+		"Iraq and the Kurds Are Going Broke",
+		"Is Warfare in Our Bones?",
+		"Justice Antonin Scalia’s Supreme Court Legacy",
+		"Keeping the Lights On During a Dark Time",
+		"Missteps in Europe’s Online Privacy Bill",
+		"Mr. Obama’s Wise Call on a Prisoner Swap",
+		"New Tensions Over the Iran Nuclear Deal",
+		"New York City Policing, by the Numbers",
+		"Poland Deviates From Democracy",
+		"President Obama’s Call to America’s Better Nature",
+		"President Obama’s Tough, Calming Talk on Terrorism",
+		"Saudi Arabia’s Barbaric Executions",
+		"Saudi Arabia’s Execution Spree",
+		"Thailand's Fear of Free Speech",
+		"The Importance of Retaking Ramadi",
+		"The Paris Climate Pact Will Need Strong Follow-Up",
+		"The Pentagon’s Insubordination on Guantánamo",
+		"The Supreme Court, the Nativists and Immigrants",
+		"The Tarnished Trump Brand",
+		"The Trump Effect, and How It Spreads",
+		"The Unfair Treatment of Ebola Workers",
+		"The Urgent Need for Peace in Yemen",
+		"Toward a Stronger European Border",
+		"Two Sides of Ted Cruz: Tort Reformer and Personal Injury Lawyer",
+		"What France's Vote Means",
+		"What It Will Take to Bankrupt ISIS ",
+		"What Narendra Modi Can Do in Paris",
+		"What Went Wrong With Navy SEALs",
+	},
+}
 var neoTestSet = testSet{
-	mainArticle: "Guns, Anger and Nonsense in Oregon",
+	mainArticle: "A College Education for Prisoners",
 	relatedArticles: []string{
 		"Gov. Christie Leaves Gun Controls Behind in New Jersey",
 		"A Bad Call on the Bergdahl Court-Martial",
@@ -113,5 +183,88 @@ func storyDriver(
 			err := pipe.Close()
 			return nil, err
 		}
+	}
+}
+
+// for the full test
+type neoAnalyzer struct {
+	metadataType string
+}
+
+func (na neoAnalyzer) Setup() error {
+	err := relationDB.Open("http://localhost:7474")
+	if err != nil {
+		panic(err)
+	}
+	return nil
+}
+
+func (na neoAnalyzer) Analyze(main analyzer.Analyzable,
+	related *analyzer.Analyzable) (bool, error) {
+
+	flow, count, err := relationDB.StrengthBetween(
+		main.FileName,
+		related.FileName,
+		na.metadataType)
+
+	if err != nil {
+		return false, err
+	}
+
+	// sqrt(flow) * count^2
+	// use sqrt to pull up things with low scores
+	// reward things with high count
+	related.Score += math.Sqrt(float64(flow)) * float64(count*count)
+	return true, nil
+
+}
+
+type threshAnalyzer struct {
+	threshhold float64
+}
+
+func (ta threshAnalyzer) Setup() error { return nil }
+
+func (ta threshAnalyzer) Analyze(main analyzer.Analyzable,
+	related *analyzer.Analyzable) (bool, error) {
+
+	if related.Score > ta.threshhold {
+		return true, nil
+	}
+	return false, nil
+}
+func TestFull(t *testing.T) {
+
+	taxFunc := neoAnalyzer{metadataType: "Taxonomy"}
+	taxModule := pipeline.StandardModule{}
+	taxModule.SetFuncs(&taxFunc)
+
+	threshFunc := threshAnalyzer{threshhold: 0.3}
+	threshModule := pipeline.StandardModule{}
+	threshModule.SetFuncs(&threshFunc)
+
+	keyFunc := neoAnalyzer{metadataType: "Keywords"}
+	keyModule := pipeline.StandardModule{}
+	keyModule.SetFuncs(&keyFunc)
+
+	lastThreshFunc := threshAnalyzer{threshhold: 1.0}
+	lastThreshModule := pipeline.StandardModule{}
+	lastThreshModule.SetFuncs(&lastThreshFunc)
+
+	// build the pipe
+	pipe := pipeline.NewPipeline()
+	pipe.AddStage(&taxModule)
+	pipe.AddStage(&threshModule)
+	pipe.AddStage(&keyModule)
+	pipe.AddStage(&lastThreshModule)
+
+	story := storyFromSet(terrorTestSet)
+	fmt.Println(story.MainArticle.FileName)
+	data, err := storyDriver(pipe, story)
+
+	assert.Nil(t, err)
+	fmt.Println("main:", story.MainArticle.FileName)
+	for i := range data {
+		fmt.Println(data[i].FileName, "score:", data[i].Score)
 	}
 }
