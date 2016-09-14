@@ -4,8 +4,8 @@ import (
 	"container/heap"
 	"fmt"
 	"github.com/opinionated/analyzer-core/analyzer"
-	"github.com/opinionated/analyzer-core/dbInterface"
 	"github.com/opinionated/pipeline"
+	"github.com/opinionated/pipeline/analyzer/dbInterface"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -298,19 +298,19 @@ func TestFull(t *testing.T) {
 
 	taxFunc := neoAnalyzer{metadataType: "Taxonomy", weight: 3.0}
 	taxModule := pipeline.StandardModule{}
-	taxModule.SetFuncs(&taxFunc)
+	taxModule.SetFuncs(taxFunc)
 
 	threshFunc := threshAnalyzer{threshhold: 1.0}
 	threshModule := pipeline.StandardModule{}
-	threshModule.SetFuncs(&threshFunc)
+	threshModule.SetFuncs(threshFunc)
 
 	conceptsFunc := neoAnalyzer{metadataType: "Concept", weight: 4.0}
 	conceptsModule := pipeline.StandardModule{}
-	conceptsModule.SetFuncs(&conceptsFunc)
+	conceptsModule.SetFuncs(conceptsFunc)
 
 	lastThreshFunc := threshAnalyzer{threshhold: 1.0}
 	lastThreshModule := pipeline.StandardModule{}
-	lastThreshModule.SetFuncs(&lastThreshFunc)
+	lastThreshModule.SetFuncs(lastThreshFunc)
 
 	keyFunc := neoAverageAnalyzer{metadataType: "Keyword", weight: 3.0}
 	keyModule := pipeline.StandardModule{}
@@ -328,8 +328,6 @@ func TestFull(t *testing.T) {
 	pipe.AddStage(&conceptsModule)
 
 	// thresh then do finer methods
-	//pipe.AddStage(&threshModule)
-	//pipe.AddStage(&lastThreshModule)
 	pipe.AddStage(&keyModule)
 	pipe.AddStage(&entityModule)
 
@@ -341,7 +339,7 @@ func TestFull(t *testing.T) {
 	assert.True(t, len(articles) > 150)
 
 	set := testSet{
-		mainArticle:     "Ted ‘Carpet-Bomb’ Cruz",
+		mainArticle:     "The Horror in San Bernardino",
 		relatedArticles: articles,
 	}
 
@@ -350,7 +348,6 @@ func TestFull(t *testing.T) {
 
 	raw, err := storyDriver(pipe, story)
 	data := heapFilter(raw, 20)
-	//data, err := storyDriver(pipe, story)
 
 	// only get the top couple of articles
 

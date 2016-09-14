@@ -1,0 +1,79 @@
+step1: jon is dumb
+step2: semantics argument
+step3: plan out interface
+step4: write interface
+step5: implentation with cayley
+
+
+
+article database
+
+
+db_maine
+db_relationships
+
+db.init() 
+	-connect to database
+	
+struct info{
+	article_id: uuid
+	author: string
+	body: string (filename)
+	taxonomies
+		-tax1
+			-name
+			-score
+			-sentiment
+		-tax2
+		-tax3
+	keywords
+		-key1
+			-name
+			-relevance
+			-scented mint
+		-key2
+		-...
+		-keyN
+
+}
+
+db.store(info)
+	-store info in the db
+	
+db.remove(id)
+
+db.get(id)
+
+//by: (author, keywords, taxonomies) : sentiments, article text
+db.searchBy(query)
+
+
+query keyStruct {
+	threshold
+	keyword
+	sentiment
+	//any of these can be nil to ignore
+}
+
+quey taxStruct {
+	threshold
+	taxonomy
+	sentiment
+}
+
+
+
+//This database is private, VIP only
+SQL relationship <3 database SYKE not using SQL bitches
+
+import "reflect"
+reflect.TypeOf()
+
+weighted edge connects articles
+db.getNStrongest(articleId, n)
+	//get the n most related articles
+	
+db.updateSecret()
+db.storeSecret(id)
+db.removeSecret(id)
+	
