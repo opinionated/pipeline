@@ -194,7 +194,6 @@ func heapFilter(articles []pipeline.Article, num int) []pipeline.Article {
 	fmt.Println("made it!")
 	heap.Init(&mheap)
 
-	// TODO: impl heap for pipeline articles
 	/*
 		for i := range articles {
 			if mheap.Len() == num {
@@ -237,7 +236,7 @@ func SquareCount(neo pipeline.Score) float32 {
 	return score.Flow * float32(score.Count*score.Count)
 }
 
-func scoreArticle(article *pipeline.Article, funcs map[string]func(pipeline.Score) float32, weights map[string]float32) float32 {
+func scoreArticle(article pipeline.Article, funcs map[string]func(pipeline.Score) float32, weights map[string]float32) float32 {
 	keys := article.Keys()
 
 	var articleScore float32
@@ -257,7 +256,7 @@ func scoreArticle(article *pipeline.Article, funcs map[string]func(pipeline.Scor
 
 type threshAnalyzer struct {
 	threshhold float32
-	analyzers  map[string]func(pipeline.Score) float32
+	analyzers  map[string]func(interface{}) float32
 	weights    map[string]float32
 }
 
@@ -266,12 +265,13 @@ func (ta threshAnalyzer) Setup() error { return nil }
 func (ta threshAnalyzer) Analyze(main pipeline.Article,
 	related *pipeline.Article) (bool, error) {
 
-	score := scoreArticle(related, ta.analyzers, ta.weights)
-	if score > ta.threshhold {
-		return true, nil
-	}
-
-	return false, nil
+		score := scoreArticle(related, ta.analyzers, ta.weights) 
+	/*
+		if related.Score > ta.threshhold {
+			return true, nil
+		}
+	*/
+	return true, nil
 }
 
 func TestFull(t *testing.T) {
@@ -280,9 +280,17 @@ func TestFull(t *testing.T) {
 	taxModule := pipeline.StandardModule{}
 	taxModule.SetFuncs(taxFunc)
 
+	threshFunc := threshAnalyzer{threshhold: 1.0}
+	threshModule := pipeline.StandardModule{}
+	threshModule.SetFuncs(threshFunc)
+
 	conceptsFunc := pipeline.NeoAnalyzer{MetadataType: "Concept"}
 	conceptsModule := pipeline.StandardModule{}
 	conceptsModule.SetFuncs(conceptsFunc)
+
+	lastThreshFunc := threshAnalyzer{threshhold: 1.0}
+	lastThreshModule := pipeline.StandardModule{}
+	lastThreshModule.SetFuncs(lastThreshFunc)
 
 	keyFunc := pipeline.NeoAnalyzer{MetadataType: "Keyword"}
 	keyModule := pipeline.StandardModule{}
@@ -304,26 +312,16 @@ func TestFull(t *testing.T) {
 	weightMap["neo_Keyword"] = 3.0
 	weightMap["neo_Entity"] = 2.0
 
-	threshFunc := threshAnalyzer{1.0, scoreFuncs, weightMap}
-	threshModule := pipeline.StandardModule{}
-	threshModule.SetFuncs(threshFunc)
-
-	lastThreshFunc := threshAnalyzer{50.0, scoreFuncs, weightMap}
-	lastThreshModule := pipeline.StandardModule{}
-	lastThreshModule.SetFuncs(lastThreshFunc)
-
 	// build the pipe
 	pipe := pipeline.NewPipeline()
 
 	// do coarse methods
 	pipe.AddStage(&taxModule)
 	pipe.AddStage(&conceptsModule)
-	pipe.AddStage(&threshModule)
 
 	// thresh then do finer methods
 	pipe.AddStage(&keyModule)
 	pipe.AddStage(&entityModule)
-	pipe.AddStage(&lastThreshModule)
 
 	// build the story
 	assert.Nil(t, relationDB.Open("http://localhost:7474"))
@@ -347,7 +345,7 @@ func TestFull(t *testing.T) {
 
 	assert.Nil(t, err)
 	fmt.Println("main:", story.MainArticle.Name())
-	for i := range data {
-		fmt.Println(data[i].Name())
+	for _ = range data {
+		//fmt.Println(data[i].FileName, "score:", data[i].Score)
 	}
 }

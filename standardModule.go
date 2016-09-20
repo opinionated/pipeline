@@ -1,12 +1,10 @@
 package pipeline
 
-import (
-	"github.com/opinionated/analyzer-core/analyzer"
-)
+import ()
 
 // StandardModuleAnalyzer can be plugged into the standard module
 type StandardModuleAnalyzer interface {
-	Analyze(analyzer.Analyzable, *analyzer.Analyzable) (bool, error)
+	Analyze(Article, *Article) (bool, error)
 	Setup() error
 }
 
@@ -27,8 +25,8 @@ func (m *StandardModule) SetFuncs(sma StandardModuleAnalyzer) {
 }
 
 // Analyze falls through to the analyze fun.
-func (m *StandardModule) Analyze(main analyzer.Analyzable,
-	related *analyzer.Analyzable) (bool, error) {
+func (m *StandardModule) Analyze(main Article,
+	related *Article) (bool, error) {
 
 	return m.sma.Analyze(main, related)
 }

@@ -1,9 +1,22 @@
 package pipeline
 
 import (
-	"github.com/opinionated/analyzer-core/analyzer"
 	"github.com/opinionated/pipeline/analyzer/dbInterface"
 )
+
+// NeoScore is flow, # connections
+type NeoScore struct {
+	Flow  float32
+	Count int
+}
+
+// Serialize the neo score
+func (score NeoScore) Serialize() []float32 {
+	arr := make([]float32, 2)
+	arr[0] = score.Flow
+	arr[1] = float32(score.Count)
+	return arr
+}
 
 // NeoAnalyzer does a standard op on a neo connection
 // Used as a "standard module analyzer
@@ -22,20 +35,22 @@ func (na NeoAnalyzer) Setup() error {
 }
 
 // Analyze the  relation between two articles with the score func
-func (na NeoAnalyzer) Analyze(main analyzer.Analyzable,
-	related *analyzer.Analyzable) (bool, error) {
+func (na NeoAnalyzer) Analyze(main Article,
+	related *Article) (bool, error) {
 
 	flow, count, err := relationDB.StrengthBetween(
-		main.FileName,
-		related.FileName,
+		main.Name(),
+		related.Name(),
 		na.MetadataType)
 
 	if err != nil {
 		return false, err
 	}
 
-	related.Score += na.ScoreFunc(flow, count)
-	return true, nil
+	neoScore := NeoScore{flow, count}
+	err = related.AddScore("neo_"+na.MetadataType, neoScore)
+
+	return err == nil, err
 }
 
 var _ StandardModuleAnalyzer = (*NeoAnalyzer)(nil)
