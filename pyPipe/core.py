@@ -14,29 +14,24 @@
 """
 
 class Article():
-    def __init__(uuid):
+    def __init__(self, uuid):
         self.uuid = uuid
         self.scores = {}
     
     # TODO: should we define a class for scores? We probably want them to be serializable?
     # TODO: how should we handle the error cases?
-    def AddScore(name, val):
-        if name in self.scores:
-            # error case
-            return False
-
+    def AddScore(self, name, val):
+        assert name not in self.scores
         self.scores[name] = val
+        return True
 
-    def GetScore(name):
-        if name not in self.scores:
-            # error case
-            return False
+    def GetScore(self, name):
+        assert name in self.scores
+        return self.scores[name]
 
-        return scores[name]
-
-    def GetUUID():
+    def GetUUID(self):
         return self.uuid
 
 class Module():
-    def Analyze(mainArticle, relatedArticle):
+    def Analyze(self, mainArticle, relatedArticle):
         return False
