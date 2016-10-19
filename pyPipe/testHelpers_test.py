@@ -33,6 +33,30 @@ class TestAddModule(unittest.TestCase):
       assert(articleSet[i].GetUUID() == results[i].GetUUID())
       assert(results[i].GetScore("add") == i)
 
+class TestPipeline(unittest.TestCase):
+  def test_simple(self):
+    articleSet = []
+    articleSet.append(core.Article("a"))
+    articleSet.append(core.Article("b"))
+    articleSet.append(core.Article("c"))
+    
+    addModule = AddModule("add")
+    secondAddModule = AddModule("2nd")
+
+    runner = testHelpers.PipelineTestRunner([addModule, secondAddModule])
+    runner.Run(core.Article("main"), articleSet)
+
+    results = runner.Get()
+    self.assertTrue(len(articleSet) == len(results))
+
+    for i in xrange(len(articleSet)):
+      assert(articleSet[i].GetUUID() == results[i].GetUUID())
+      assert(results[i].GetScore("add") == i)
+      assert(results[i].GetScore("2nd") == i)
+
+    runner.Close()
+
+
 if __name__=="__main__":
   unittest.main()
 

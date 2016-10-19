@@ -32,6 +32,8 @@ class Article():
     def GetUUID(self):
         return self.uuid
 
+# single unit of analysis, doesn't know how stories move around
 class Module():
     def Analyze(self, mainArticle, relatedArticle):
-        return False
+        # pure virtual func
+        assert False
