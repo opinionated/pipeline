@@ -2,7 +2,6 @@ package pipeline_test
 
 import (
 	"fmt"
-	"github.com/opinionated/analyzer-core/analyzer"
 	"github.com/opinionated/pipeline"
 	"github.com/stretchr/testify/assert"
 	"testing"
@@ -21,9 +20,20 @@ type addAnalyzer struct {
 	howmuch int
 }
 
+type TestStandardScore struct {
+	score float32
+}
+
+func (score TestStandardScore) Serialize() []float32 {
+	arr := make([]float32, 1)
+	arr[0] = score.score
+	return arr
+}
+
 func (a addAnalyzer) Analyze(
-	_ analyzer.Analyzable, related *analyzer.Analyzable) (bool, error) {
-	related.Score += float64(a.howmuch)
+	_ pipeline.Article, related *pipeline.Article) (bool, error) {
+	score := TestStandardScore{score: float32(a.howmuch)}
+	related.AddScore("add", score)
 	return true, nil
 }
 
@@ -38,7 +48,7 @@ type errorAnalyzer struct {
 }
 
 func (a *errorAnalyzer) Analyze(
-	_ analyzer.Analyzable, related *analyzer.Analyzable) (bool, error) {
+	_ pipeline.Article, related *pipeline.Article) (bool, error) {
 
 	a.count++
 	if a.count == a.when {
@@ -58,7 +68,7 @@ func (a errorAnalyzer) Setup() error {
 }
 
 func (a *bumpAnalyzer) Analyze(
-	_ analyzer.Analyzable, related *analyzer.Analyzable) (bool, error) {
+	_ pipeline.Article, related *pipeline.Article) (bool, error) {
 
 	a.count++
 	if a.count == a.when {
@@ -88,7 +98,11 @@ func TestStandardAdd(t *testing.T) {
 	assert.Len(t, data, 3)
 
 	for i := range data {
-		assert.Equal(t, 1.0, data[i].Score)
+		scorei, err := data[i].GetScore("add")
+		assert.Nil(t, err)
+		score := scorei.(TestStandardScore)
+
+		assert.EqualValues(t, 1.0, score.score)
 	}
 }
 
@@ -113,7 +127,11 @@ func TestBump(t *testing.T) {
 	assert.Len(t, data, 2)
 
 	for i := range data {
-		assert.Equal(t, 1.0, data[i].Score)
+		scorei, err := data[i].GetScore("add")
+		assert.Nil(t, err)
+		score := scorei.(TestStandardScore)
+
+		assert.EqualValues(t, 1.0, score.score)
 	}
 }
 

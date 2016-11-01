@@ -2,13 +2,12 @@ package pipeline
 
 import (
 	"fmt"
-	"github.com/opinionated/analyzer-core/analyzer"
 )
 
 // Story is passed through the pipeline.
 type Story struct {
-	MainArticle     analyzer.Analyzable
-	RelatedArticles chan analyzer.Analyzable
+	MainArticle     Article
+	RelatedArticles chan Article
 }
 
 // Module is a stage in the pipeline.
@@ -18,7 +17,7 @@ type Module interface {
 	// Analyze is run on each article in a Story's related articles. It ranks
 	// the related article against the main article. This is the meat of each
 	// module.
-	Analyze(analyzer.Analyzable, *analyzer.Analyzable) (bool, error)
+	Analyze(Article, *Article) (bool, error)
 
 	// up to each module to make sure the close happens properly
 	Close() error
@@ -40,7 +39,7 @@ type Module interface {
 }
 
 type analyzedResponse struct {
-	article analyzer.Analyzable
+	article Article
 	use     bool
 }
 
@@ -58,16 +57,16 @@ func Run(m Module) {
 	var outputStream chan Story
 
 	var currentStory Story
-	var relatedIn chan analyzer.Analyzable // input related articles tmp chan
+	var relatedIn chan Article // input related articles tmp chan
 
 	var analyzedStory Story
-	var relatedOut chan analyzer.Analyzable // output related article tmp chan
+	var relatedOut chan Article // output related article tmp chan
 
 	// tells the analyzer to exit early
 	cancelAnalyze := make(chan bool, 1)
 
 	// tmp state holder
-	var analyzedArticle analyzer.Analyzable
+	var analyzedArticle Article
 
 	// response type from article
 
@@ -76,7 +75,7 @@ func Run(m Module) {
 	analyzedtmp = analyzed
 
 	// wraps a call to analyze so we can do it async
-	doAnalyze := func(main, related analyzer.Analyzable) {
+	doAnalyze := func(main, related Article) {
 
 		// TODO: let this kick things out of the pipe, give errors
 		// TODO: handle errors
@@ -137,7 +136,7 @@ func Run(m Module) {
 
 			// build the output story
 			analyzedStory.MainArticle = currentStory.MainArticle
-			analyzedStory.RelatedArticles = make(chan analyzer.Analyzable)
+			analyzedStory.RelatedArticles = make(chan Article)
 
 			// enable story output stream
 			outputStream = m.GetOutputChan()
