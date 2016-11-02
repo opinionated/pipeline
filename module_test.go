@@ -263,7 +263,7 @@ func IDFAverage(idf pipeline.Score) float32 {
 
 	var sum float32
 	for i := range score.Counts {
-		sum += 1.0 / float32(score.Counts[i])
+		sum += 1.0 / float32(score.Counts[i]*score.Counts[i])
 	}
 
 	if sum == 0 {
@@ -337,6 +337,10 @@ func TestFull(t *testing.T) {
 	entityIDFModule := pipeline.StandardModule{}
 	entityIDFModule.SetFuncs(&entityIDFFunc)
 
+	conceptIDFFunc := pipeline.IDFAnalyzer{MetadataType: "Concept"}
+	conceptIDFModule := pipeline.StandardModule{}
+	conceptIDFModule.SetFuncs(&conceptIDFFunc)
+
 	scoreFuncs := make(map[string]func(pipeline.Score) float32)
 	scoreFuncs["neo_Taxonomy"] = SquareCount //SquareFlow
 	scoreFuncs["neo_Concept"] = SquareCount
@@ -344,20 +348,22 @@ func TestFull(t *testing.T) {
 	scoreFuncs["neo_Entity"] = ScoreAverage
 	scoreFuncs["idf_Keyword"] = IDFAverage
 	scoreFuncs["idf_Entity"] = IDFAverage
+	scoreFuncs["idf_Concept"] = IDFAverage
 
 	weightMap := make(map[string]float32)
-	weightMap["neo_Taxonomy"] = 2.0
-	weightMap["neo_Concept"] = 0.0
-	weightMap["neo_Keyword"] = 0.0
-	weightMap["neo_Entity"] = 0.0
+	weightMap["neo_Taxonomy"] = 3.0
+	weightMap["neo_Concept"] = 3.0
+	weightMap["neo_Keyword"] = 3.0
+	weightMap["neo_Entity"] = 3.0
 	weightMap["idf_Keyword"] = 10.0
 	weightMap["idf_Entity"] = 10.0
+	weightMap["idf_Concept"] = 10.0
 
 	threshFunc := threshAnalyzer{0.0, scoreFuncs, weightMap}
 	threshModule := pipeline.StandardModule{}
 	threshModule.SetFuncs(threshFunc)
 
-	lastThreshFunc := threshAnalyzer{1.0, scoreFuncs, weightMap}
+	lastThreshFunc := threshAnalyzer{40.0, scoreFuncs, weightMap}
 	lastThreshModule := pipeline.StandardModule{}
 	lastThreshModule.SetFuncs(lastThreshFunc)
 
@@ -365,15 +371,16 @@ func TestFull(t *testing.T) {
 	pipe := pipeline.NewPipeline()
 
 	// do coarse methods
-	//pipe.AddStage(&taxModule)
-	//pipe.AddStage(&conceptsModule)
+	pipe.AddStage(&taxModule)
+	pipe.AddStage(&conceptsModule)
 	pipe.AddStage(&keyIDFModule)
 	pipe.AddStage(&entityIDFModule)
-	//pipe.AddStage(&threshModule)
+	pipe.AddStage(&conceptIDFModule)
+	pipe.AddStage(&threshModule)
 
 	// thresh then do finer methods
-	//pipe.AddStage(&keyModule)
-	//pipe.AddStage(&entityModule)
+	pipe.AddStage(&keyModule)
+	pipe.AddStage(&entityModule)
 	pipe.AddStage(&lastThreshModule)
 
 	// build the story
@@ -384,8 +391,8 @@ func TestFull(t *testing.T) {
 	assert.True(t, len(articles) > 150)
 
 	set := testSet{
-		//mainArticle:     "The Horror in San Bernardino",
-		mainArticle:     "Fear Ignorance, Not Muslims",
+		mainArticle: "The Horror in San Bernardino",
+		//mainArticle:     "Fear Ignorance, Not Muslims",
 		relatedArticles: articles,
 	}
 
