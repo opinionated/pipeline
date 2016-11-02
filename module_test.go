@@ -263,18 +263,14 @@ func IDFAverage(idf pipeline.Score) float32 {
 
 	var sum float32
 	for i := range score.Counts {
-		sum += float32(score.Counts[i])
+		sum += 1.0 / float32(score.Counts[i])
 	}
 
 	if sum == 0 {
 		return 0.0
 	}
-	fmt.Println("YASSSS!")
 
-	avg := sum / float32(len(score.Counts))
-	avg = 1.0 / avg
-
-	return avg
+	return sum
 }
 
 func scoreArticle(article *pipeline.Article, funcs map[string]func(pipeline.Score) float32, weights map[string]float32) float32 {
@@ -354,14 +350,14 @@ func TestFull(t *testing.T) {
 	weightMap["neo_Concept"] = 0.0
 	weightMap["neo_Keyword"] = 0.0
 	weightMap["neo_Entity"] = 0.0
-	weightMap["idf_Keyword"] = 300.0
-	weightMap["idf_Entity"] = 300.0
+	weightMap["idf_Keyword"] = 10.0
+	weightMap["idf_Entity"] = 10.0
 
 	threshFunc := threshAnalyzer{0.0, scoreFuncs, weightMap}
 	threshModule := pipeline.StandardModule{}
 	threshModule.SetFuncs(threshFunc)
 
-	lastThreshFunc := threshAnalyzer{01.0, scoreFuncs, weightMap}
+	lastThreshFunc := threshAnalyzer{1.0, scoreFuncs, weightMap}
 	lastThreshModule := pipeline.StandardModule{}
 	lastThreshModule.SetFuncs(lastThreshFunc)
 
@@ -371,7 +367,7 @@ func TestFull(t *testing.T) {
 	// do coarse methods
 	//pipe.AddStage(&taxModule)
 	//pipe.AddStage(&conceptsModule)
-	//pipe.AddStage(&keyIDFModule)
+	pipe.AddStage(&keyIDFModule)
 	pipe.AddStage(&entityIDFModule)
 	//pipe.AddStage(&threshModule)
 

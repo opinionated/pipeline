@@ -166,14 +166,14 @@ func GetFauxIDF(startID string, endID string, label string) ([]int, error) {
 	}{}
 	statementStr := `
 	match (start:Article {Identifier: {startID}})
-	match p = (start)-[rel_s]-(:Entity)-[rel_e]-(end) with collect(p) as paths
+	match p = (start)-[rel_s]-(:MetadataType)-[rel_e]-(end) with collect(p) as paths
 
 	return reduce(o_s = [], path in paths | 
 		o_s + reduce(i_s = [], node in nodes(path) |
 			case when (node.Identifier = {endID})
 			then
 				i_s + [reduce(count = 0, i_path in paths | 
-				case when filter(tmpNode in nodes(path) where tmpNode:Entity)[0] in nodes(i_path)
+				case when filter(tmpNode in nodes(path) where tmpNode:MetadataType)[0] in nodes(i_path)
 				then 
 					count + 1
 				else
@@ -187,7 +187,6 @@ func GetFauxIDF(startID string, endID string, label string) ([]int, error) {
 		) as counts
 	`
 
-	//statementStr = `return [1, 2] as counts`
 	cq := neoism.CypherQuery{
 		Statement:  fixLabel(statementStr, label),
 		Parameters: neoism.Props{"startID": startID, "endID": endID, "label": label},
@@ -196,23 +195,13 @@ func GetFauxIDF(startID string, endID string, label string) ([]int, error) {
 
 	err := db.Cypher(&cq)
 	if err != nil {
-		//panic(err)
 		return make([]int, 0), err
 	}
-
-	fmt.Println(result)
 
 	if len(result) == 0 {
 		return make([]int, 0), err
 	}
 
-	//for _ = range result {
-	//panic("hey hey")
-	//}
-
-	//fmt.Println(result)
-	//panic("hey hey")
-	//return make([]int, 0), err
 	return result[0].Counts, err
 }
 
@@ -238,7 +227,7 @@ func InsertRelations(articleID string, keyword string, values interface{}) error
 }
 
 func fixLabel(statement string, label string) string {
-	return strings.Replace(statement, "MetadataType", label, 1)
+	return strings.Replace(statement, "MetadataType", label, -1)
 }
 
 // clear deletes all nodes from teh db, used most for testing
