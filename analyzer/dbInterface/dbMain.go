@@ -151,11 +151,69 @@ func StrengthBetween(startID string, endID string, label string) (float32, int, 
 	if err != nil {
 		return 0, 0, err
 	}
+
 	if len(result) != 1 {
 		return 0, 0, fmt.Errorf("result is too long")
 	}
 
 	return result[0].Score, result[0].Count, err
+}
+
+// GetFauxIDF returns the number of documents that use each connection type
+func GetFauxIDF(startID string, endID string, label string) ([]int, error) {
+	result := []struct {
+		Counts []int `json:"counts"`
+	}{}
+	statementStr := `
+	match (start:Article {Identifier: {startID}})
+	match p = (start)-[rel_s]-(:Entity)-[rel_e]-(end) with collect(p) as paths
+
+	return reduce(o_s = [], path in paths | 
+		o_s + reduce(i_s = [], node in nodes(path) |
+			case when (node.Identifier = {endID})
+			then
+				i_s + [reduce(count = 0, i_path in paths | 
+				case when filter(tmpNode in nodes(path) where tmpNode:Entity)[0] in nodes(i_path)
+				then 
+					count + 1
+				else
+					count + 0
+				end
+				)]
+			else
+				i_s + []
+			end
+			)
+		) as counts
+	`
+
+	//statementStr = `return [1, 2] as counts`
+	cq := neoism.CypherQuery{
+		Statement:  fixLabel(statementStr, label),
+		Parameters: neoism.Props{"startID": startID, "endID": endID, "label": label},
+		Result:     &result,
+	}
+
+	err := db.Cypher(&cq)
+	if err != nil {
+		//panic(err)
+		return make([]int, 0), err
+	}
+
+	fmt.Println(result)
+
+	if len(result) == 0 {
+		return make([]int, 0), err
+	}
+
+	//for _ = range result {
+	//panic("hey hey")
+	//}
+
+	//fmt.Println(result)
+	//panic("hey hey")
+	//return make([]int, 0), err
+	return result[0].Counts, err
 }
 
 // InsertRelations inserts an array of relations named by keyword

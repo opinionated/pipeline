@@ -228,6 +228,20 @@ func ScoreAverage(neo pipeline.Score) float32 {
 	return 0
 }
 
+func SquareFlow(neo pipeline.Score) float32 {
+	score, ok := neo.(pipeline.NeoScore)
+	if !ok {
+		panic("failed to convert neo score!")
+	}
+
+	//	return score.Flow * score.Flow * float32(score.Count)
+	if score.Count > 0 {
+		val := score.Flow / float32(score.Count)
+		return val * val
+	}
+	return 0
+}
+
 func SquareCount(neo pipeline.Score) float32 {
 	score, ok := neo.(pipeline.NeoScore)
 	if !ok {
@@ -235,6 +249,32 @@ func SquareCount(neo pipeline.Score) float32 {
 	}
 
 	return score.Flow * float32(score.Count*score.Count)
+}
+
+func IDFAverage(idf pipeline.Score) float32 {
+	score, ok := idf.(pipeline.IDFScore)
+	if !ok {
+		panic("failed to convert neo score!")
+	}
+
+	if len(score.Counts) == 0 {
+		return 0.0
+	}
+
+	var sum float32
+	for i := range score.Counts {
+		sum += float32(score.Counts[i])
+	}
+
+	if sum == 0 {
+		return 0.0
+	}
+	fmt.Println("YASSSS!")
+
+	avg := sum / float32(len(score.Counts))
+	avg = 1.0 / avg
+
+	return avg
 }
 
 func scoreArticle(article *pipeline.Article, funcs map[string]func(pipeline.Score) float32, weights map[string]float32) float32 {
@@ -292,23 +332,36 @@ func TestFull(t *testing.T) {
 	entityModule := pipeline.StandardModule{}
 	entityModule.SetFuncs(&entityFunc)
 
+	// idf funcs
+	keyIDFFunc := pipeline.IDFAnalyzer{MetadataType: "Keyword"}
+	keyIDFModule := pipeline.StandardModule{}
+	keyIDFModule.SetFuncs(&keyIDFFunc)
+
+	entityIDFFunc := pipeline.IDFAnalyzer{MetadataType: "Entity"}
+	entityIDFModule := pipeline.StandardModule{}
+	entityIDFModule.SetFuncs(&entityIDFFunc)
+
 	scoreFuncs := make(map[string]func(pipeline.Score) float32)
-	scoreFuncs["neo_Taxonomy"] = SquareCount
+	scoreFuncs["neo_Taxonomy"] = SquareCount //SquareFlow
 	scoreFuncs["neo_Concept"] = SquareCount
 	scoreFuncs["neo_Keyword"] = ScoreAverage
 	scoreFuncs["neo_Entity"] = ScoreAverage
+	scoreFuncs["idf_Keyword"] = IDFAverage
+	scoreFuncs["idf_Entity"] = IDFAverage
 
 	weightMap := make(map[string]float32)
-	weightMap["neo_Taxonomy"] = 3.0
-	weightMap["neo_Concept"] = 4.0
-	weightMap["neo_Keyword"] = 3.0
-	weightMap["neo_Entity"] = 2.0
+	weightMap["neo_Taxonomy"] = 2.0
+	weightMap["neo_Concept"] = 0.0
+	weightMap["neo_Keyword"] = 0.0
+	weightMap["neo_Entity"] = 0.0
+	weightMap["idf_Keyword"] = 300.0
+	weightMap["idf_Entity"] = 300.0
 
-	threshFunc := threshAnalyzer{1.0, scoreFuncs, weightMap}
+	threshFunc := threshAnalyzer{0.0, scoreFuncs, weightMap}
 	threshModule := pipeline.StandardModule{}
 	threshModule.SetFuncs(threshFunc)
 
-	lastThreshFunc := threshAnalyzer{50.0, scoreFuncs, weightMap}
+	lastThreshFunc := threshAnalyzer{01.0, scoreFuncs, weightMap}
 	lastThreshModule := pipeline.StandardModule{}
 	lastThreshModule.SetFuncs(lastThreshFunc)
 
@@ -316,13 +369,15 @@ func TestFull(t *testing.T) {
 	pipe := pipeline.NewPipeline()
 
 	// do coarse methods
-	pipe.AddStage(&taxModule)
-	pipe.AddStage(&conceptsModule)
-	pipe.AddStage(&threshModule)
+	//pipe.AddStage(&taxModule)
+	//pipe.AddStage(&conceptsModule)
+	//pipe.AddStage(&keyIDFModule)
+	pipe.AddStage(&entityIDFModule)
+	//pipe.AddStage(&threshModule)
 
 	// thresh then do finer methods
-	pipe.AddStage(&keyModule)
-	pipe.AddStage(&entityModule)
+	//pipe.AddStage(&keyModule)
+	//pipe.AddStage(&entityModule)
 	pipe.AddStage(&lastThreshModule)
 
 	// build the story
@@ -333,7 +388,8 @@ func TestFull(t *testing.T) {
 	assert.True(t, len(articles) > 150)
 
 	set := testSet{
-		mainArticle:     "The Horror in San Bernardino",
+		//mainArticle:     "The Horror in San Bernardino",
+		mainArticle:     "Fear Ignorance, Not Muslims",
 		relatedArticles: articles,
 	}
 
@@ -349,5 +405,16 @@ func TestFull(t *testing.T) {
 	fmt.Println("main:", story.MainArticle.Name())
 	for i := range data {
 		fmt.Println(data[i].Name())
+		printArticle(data[i])
+		fmt.Println("total score:", scoreArticle(&data[i], scoreFuncs, weightMap))
+		fmt.Println()
+	}
+}
+
+func printArticle(article pipeline.Article) {
+	keys := article.Keys()
+	for _, key := range keys {
+		score, _ := article.GetScore(key)
+		fmt.Println(key, "is:", score)
 	}
 }
