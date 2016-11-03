@@ -276,12 +276,12 @@ func GetRelations(article string, metadataType string, thresh float64) ([]string
 	}{}
 
 	statementStr := `
-		match (start:Article)-[r]-(key)
+		match (start:Article)-[r]-(key:MetadataType)
 		where r.Relevance > {thresh} and start.Identifier={article} 
 		return key.Text as metadata 
 		`
 	cq := neoism.CypherQuery{
-		Statement:  statementStr,
+		Statement:  fixLabel(statementStr, metadataType),
 		Parameters: neoism.Props{"thresh": thresh, "article": article},
 		Result:     &result,
 	}

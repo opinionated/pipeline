@@ -341,6 +341,11 @@ func TestFull(t *testing.T) {
 	conceptIDFModule := pipeline.StandardModule{}
 	conceptIDFModule.SetFuncs(&conceptIDFFunc)
 
+	// word2vec
+	entityWVFunc := pipeline.WordVecAnalyzer{MetadataType: "Entity"}
+	entityWVModule := pipeline.StandardModule{}
+	entityWVModule.SetFuncs(&entityWVFunc)
+
 	scoreFuncs := make(map[string]func(pipeline.Score) float32)
 	scoreFuncs["neo_Taxonomy"] = SquareCount //SquareFlow
 	scoreFuncs["neo_Concept"] = SquareCount
@@ -371,24 +376,26 @@ func TestFull(t *testing.T) {
 	pipe := pipeline.NewPipeline()
 
 	// do coarse methods
-	pipe.AddStage(&taxModule)
-	pipe.AddStage(&conceptsModule)
-	pipe.AddStage(&keyIDFModule)
-	pipe.AddStage(&entityIDFModule)
-	pipe.AddStage(&conceptIDFModule)
-	pipe.AddStage(&threshModule)
+	//pipe.AddStage(&taxModule)
+	//pipe.AddStage(&conceptsModule)
+	//pipe.AddStage(&keyIDFModule)
+	//pipe.AddStage(&entityIDFModule)
+	//pipe.AddStage(&conceptIDFModule)
+	//pipe.AddStage(&threshModule)
+	pipe.AddStage(&entityWVModule)
 
 	// thresh then do finer methods
-	pipe.AddStage(&keyModule)
-	pipe.AddStage(&entityModule)
-	pipe.AddStage(&lastThreshModule)
+	//pipe.AddStage(&keyModule)
+	//pipe.AddStage(&entityModule)
+	//pipe.AddStage(&lastThreshModule)
 
 	// build the story
 	assert.Nil(t, relationDB.Open("http://localhost:7474"))
 	articles, err := relationDB.GetAll()
+	articles = articles[0:30]
 
 	assert.Nil(t, err)
-	assert.True(t, len(articles) > 150)
+	//assert.True(t, len(articles) > 150)
 
 	set := testSet{
 		mainArticle: "The Horror in San Bernardino",
