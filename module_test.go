@@ -248,7 +248,7 @@ func SquareCount(neo pipeline.Score) float32 {
 		panic("failed to convert neo score!")
 	}
 
-	return score.Flow * float32(score.Count*score.Count)
+	return score.Flow * float32(score.Count)
 }
 
 func IDFAverage(idf pipeline.Score) float32 {
@@ -346,6 +346,14 @@ func TestFull(t *testing.T) {
 	entityWVModule := pipeline.StandardModule{}
 	entityWVModule.SetFuncs(&entityWVFunc)
 
+	conceptWVFunc := pipeline.WordVecAnalyzer{MetadataType: "Concept"}
+	conceptWVModule := pipeline.StandardModule{}
+	conceptWVModule.SetFuncs(&conceptWVFunc)
+
+	keyWVFunc := pipeline.WordVecAnalyzer{MetadataType: "Keyword"}
+	keyWVModule := pipeline.StandardModule{}
+	keyWVModule.SetFuncs(&keyWVFunc)
+
 	scoreFuncs := make(map[string]func(pipeline.Score) float32)
 	scoreFuncs["neo_Taxonomy"] = SquareCount //SquareFlow
 	scoreFuncs["neo_Concept"] = SquareCount
@@ -354,6 +362,9 @@ func TestFull(t *testing.T) {
 	scoreFuncs["idf_Keyword"] = IDFAverage
 	scoreFuncs["idf_Entity"] = IDFAverage
 	scoreFuncs["idf_Concept"] = IDFAverage
+	scoreFuncs["wordvec_Concept"] = SquareFlow
+	scoreFuncs["wordvec_Keyword"] = SquareFlow
+	scoreFuncs["wordvec_Entity"] = SquareFlow
 
 	weightMap := make(map[string]float32)
 	weightMap["neo_Taxonomy"] = 3.0
@@ -363,12 +374,16 @@ func TestFull(t *testing.T) {
 	weightMap["idf_Keyword"] = 10.0
 	weightMap["idf_Entity"] = 10.0
 	weightMap["idf_Concept"] = 10.0
+	weightMap["wordvec_Taxonomy"] = 10.0
+	weightMap["wordvec_Concept"] = 10.0
+	weightMap["wordvec_Keyword"] = 10.0
+	weightMap["wordvec_Entity"] = 10.0
 
 	threshFunc := threshAnalyzer{0.0, scoreFuncs, weightMap}
 	threshModule := pipeline.StandardModule{}
 	threshModule.SetFuncs(threshFunc)
 
-	lastThreshFunc := threshAnalyzer{40.0, scoreFuncs, weightMap}
+	lastThreshFunc := threshAnalyzer{7.0, scoreFuncs, weightMap}
 	lastThreshModule := pipeline.StandardModule{}
 	lastThreshModule.SetFuncs(lastThreshFunc)
 
@@ -383,16 +398,17 @@ func TestFull(t *testing.T) {
 	//pipe.AddStage(&conceptIDFModule)
 	//pipe.AddStage(&threshModule)
 	pipe.AddStage(&entityWVModule)
+	pipe.AddStage(&conceptWVModule)
+	pipe.AddStage(&keyWVModule)
 
 	// thresh then do finer methods
 	//pipe.AddStage(&keyModule)
 	//pipe.AddStage(&entityModule)
-	//pipe.AddStage(&lastThreshModule)
+	pipe.AddStage(&lastThreshModule)
 
 	// build the story
 	assert.Nil(t, relationDB.Open("http://localhost:7474"))
 	articles, err := relationDB.GetAll()
-	articles = articles[0:30]
 
 	assert.Nil(t, err)
 	//assert.True(t, len(articles) > 150)

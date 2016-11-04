@@ -1,7 +1,6 @@
 package pipeline
 
 import (
-	"fmt"
 	"github.com/opinionated/pipeline/analyzer/dbInterface"
 	"github.com/sajari/word2vec"
 	"strings"
@@ -25,6 +24,8 @@ func (score WordVecScore) Serialize() []float32 {
 type WordVecAnalyzer struct {
 	MetadataType string
 	client       word2vec.Client
+	cache        []string
+	cacheArt     string
 }
 
 // Setup the connection to the neo db
@@ -35,6 +36,7 @@ func (na *WordVecAnalyzer) Setup() error {
 	}
 
 	na.client = word2vec.Client{Addr: "localhost:1234"}
+	na.cache = nil
 
 	return nil
 }
@@ -45,6 +47,10 @@ func fixString(str string) string {
 }
 
 func (na WordVecAnalyzer) getFixedStrs(article Article) ([]string, error) {
+	if na.cacheArt == article.Name() {
+		return na.cache, nil
+	}
+
 	strs, err := relationDB.GetRelations(
 		article.Name(),
 		na.MetadataType,
@@ -53,13 +59,18 @@ func (na WordVecAnalyzer) getFixedStrs(article Article) ([]string, error) {
 		return nil, err
 	}
 
+	for i := range strs {
+		strs[i] = fixString(strs[i])
+	}
+
 	return strs, err
 }
 
-func (na WordVecAnalyzer) getScore(main []string, related []string) (float32, error) {
+func (na WordVecAnalyzer) getScore(main []string, related []string) (float32, int, error) {
 
 	var totalScore float32
 	totalScore = 0.0
+	totalCount := 0
 	for i := range main {
 		for j := range related {
 
@@ -77,18 +88,20 @@ func (na WordVecAnalyzer) getScore(main []string, related []string) (float32, er
 			if err != nil {
 				continue
 			}
-			if score > 0.3 {
-				fmt.Println("similarity:", main[i], related[j])
+
+			if score > 0.5 {
+				//fmt.Println("similarity:", main[i], related[j], score)
+				totalCount++
 				totalScore += score
 			}
 		}
 	}
 
-	return totalScore, nil
+	return totalScore, totalCount, nil
 }
 
 // Analyze the  relation between two articles with the score func
-func (na WordVecAnalyzer) Analyze(main Article,
+func (na *WordVecAnalyzer) Analyze(main Article,
 	related *Article) (bool, error) {
 	//na.tryInv(main, related)
 	mainStrs, err := na.getFixedStrs(main)
@@ -96,15 +109,21 @@ func (na WordVecAnalyzer) Analyze(main Article,
 		return false, err
 	}
 
+	if main.Name() != na.cacheArt {
+		na.cache = mainStrs
+	}
+
 	relStrs, err := na.getFixedStrs(*related)
 	if err != nil {
 		return false, err
 	}
 
-	score, err := na.getScore(mainStrs, relStrs)
-	fmt.Println("related:", related.name, "totalScore:", score)
+	score, count, err := na.getScore(mainStrs, relStrs)
+	//fmt.Println("related:", related.name, "totalScore:", score, count)
 
-	return true, nil
+	scoreStruct := NeoScore{score, count}
+	err = related.AddScore("wordvec_"+na.MetadataType, scoreStruct)
+	return true, err
 }
 
 var _ StandardModuleAnalyzer = (*WordVecAnalyzer)(nil)
