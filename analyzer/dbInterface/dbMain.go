@@ -151,11 +151,58 @@ func StrengthBetween(startID string, endID string, label string) (float32, int, 
 	if err != nil {
 		return 0, 0, err
 	}
+
 	if len(result) != 1 {
 		return 0, 0, fmt.Errorf("result is too long")
 	}
 
 	return result[0].Score, result[0].Count, err
+}
+
+// GetFauxIDF returns the number of documents that use each connection type
+func GetFauxIDF(startID string, endID string, label string) ([]int, error) {
+	result := []struct {
+		Counts []int `json:"counts"`
+	}{}
+	statementStr := `
+	match (start:Article {Identifier: {startID}})
+	match p = (start)-[rel_s]-(:MetadataType)-[rel_e]-(end) with collect(p) as paths
+
+	return reduce(o_s = [], path in paths | 
+		o_s + reduce(i_s = [], node in nodes(path) |
+			case when (node.Identifier = {endID})
+			then
+				i_s + [reduce(count = 0, i_path in paths | 
+				case when filter(tmpNode in nodes(path) where tmpNode:MetadataType)[0] in nodes(i_path)
+				then 
+					count + 1
+				else
+					count + 0
+				end
+				)]
+			else
+				i_s + []
+			end
+			)
+		) as counts
+	`
+
+	cq := neoism.CypherQuery{
+		Statement:  fixLabel(statementStr, label),
+		Parameters: neoism.Props{"startID": startID, "endID": endID, "label": label},
+		Result:     &result,
+	}
+
+	err := db.Cypher(&cq)
+	if err != nil {
+		return make([]int, 0), err
+	}
+
+	if len(result) == 0 {
+		return make([]int, 0), err
+	}
+
+	return result[0].Counts, err
 }
 
 // InsertRelations inserts an array of relations named by keyword
@@ -180,7 +227,7 @@ func InsertRelations(articleID string, keyword string, values interface{}) error
 }
 
 func fixLabel(statement string, label string) string {
-	return strings.Replace(statement, "MetadataType", label, 1)
+	return strings.Replace(statement, "MetadataType", label, -1)
 }
 
 // clear deletes all nodes from teh db, used most for testing
@@ -229,12 +276,12 @@ func GetRelations(article string, metadataType string, thresh float64) ([]string
 	}{}
 
 	statementStr := `
-		match (start:Article)-[r]-(key)
+		match (start:Article)-[r]-(key:MetadataType)
 		where r.Relevance > {thresh} and start.Identifier={article} 
 		return key.Text as metadata 
 		`
 	cq := neoism.CypherQuery{
-		Statement:  statementStr,
+		Statement:  fixLabel(statementStr, metadataType),
 		Parameters: neoism.Props{"thresh": thresh, "article": article},
 		Result:     &result,
 	}
