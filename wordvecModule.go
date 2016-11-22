@@ -2,7 +2,7 @@ package pipeline
 
 import (
 	"github.com/opinionated/pipeline/analyzer/dbInterface"
-	"github.com/sajari/word2vec"
+	"github.com/opinionated/word2vec"
 	"strings"
 )
 

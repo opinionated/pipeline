@@ -2,7 +2,7 @@ package pipeline_test
 
 import (
 	"fmt"
-	"github.com/sajari/word2vec"
+	"github.com/opinionated/word2vec"
 	"testing"
 )
 
