@@ -400,8 +400,8 @@ func TestFull(t *testing.T) {
 	//pipe.AddStage(&conceptIDFModule)
 	//pipe.AddStage(&threshModule)
 	//pipe.AddStage(&entityWVModule)
-	pipe.AddStage(&conceptWVModule)
-	//pipe.AddStage(&keyWVModule)
+	//pipe.AddStage(&conceptWVModule)
+	pipe.AddStage(&keyWVModule)
 
 	// thresh then do finer methods
 	//pipe.AddStage(&keyModule)
@@ -418,7 +418,7 @@ func TestFull(t *testing.T) {
 	set := testSet{
 		mainArticle: "The Horror in San Bernardino",
 		//mainArticle:     "Fear Ignorance, Not Muslims",
-		relatedArticles: articles[0:5],
+		relatedArticles: articles[0:15],
 	}
 
 	story := storyFromSet(set)

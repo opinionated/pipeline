@@ -81,15 +81,50 @@ func squareVec(a word2vec.Vector) []float64 {
 	return result
 }
 
+func doCastVec(a word2vec.Vector) []float64 {
+	result := make([]float64, len(a))
+	//a.Normalise()
+	for i := range a {
+		result[i] = float64(a[i])
+		//result[i] = math.Sqrt(float64(a[i]))
+	}
+	return result
+}
+
+// takes in a features vec and converts to dist
+func toDistVec(main Features) Features {
+
+	ret := make(Features, len(main))
+
+	for i := range main {
+		// slot for each related
+		slot := make([]float64, len(main))
+		for j := range main {
+			slot[j] = dotVecs(main[i].data, main[j].data)
+			//slot[j] = slot[j] * slot[j]
+			if i == j {
+				slot[j] = 0.5
+			}
+		}
+
+		ret[i] = Feature{id: main[i].id, data: slot, which: main[i].which}
+	}
+
+	return ret
+}
+
 func buildFeatureArray(words map[string]word2vec.Vector, which int) (Features, error) {
 	ret := make(Features, len(words))
 	idx := 0
 	for key, vec := range words {
 		vec.Normalise()
-		castVec := make([]float64, len(vec))
-		for i := range vec {
-			castVec[i] = float64(vec[i])
-		}
+		/*
+			castVec := make([]float64, len(vec))
+			for i := range vec {
+				castVec[i] = float64(vec[i])
+			}
+		*/
+		castVec := doCastVec(vec)
 		//castVec := squareVec(vec)
 
 		ret[idx] = Feature{id: key, data: castVec, which: which}
@@ -163,7 +198,7 @@ func doCluster(words map[string]word2vec.Vector, shifter meanshift.Shifter) {
 	}
 }
 
-func doClusterOverlap(features Features, shifter meanshift.Shifter) {
+func doClusterOverlap(features Features, shifter meanshift.Shifter) cluster.Clusterer {
 	fmt.Println("===========================")
 	ms := meanshift.New(features, shifter, 0.01, 10)
 	err := ms.Cluster()
@@ -171,21 +206,22 @@ func doClusterOverlap(features Features, shifter meanshift.Shifter) {
 		panic(err)
 	}
 
-	for _, c := range ms.Centers() {
-		fmt.Println("")
-		for _, i := range c.Members() {
-			f := features[i]
-			fmt.Println(f.which, f.id)
+	return ms
 
-			if len(c.Members()) == 1 {
-				//fmt.Println(c.V())
-			}
-		}
-	}
 }
 
-// ClusterOverlap for the two articles
-func ClusterOverlap(main, related map[string]word2vec.Vector) {
+func dotVecs(a, b []float64) float64 {
+	sum := 0.0
+	for i := range a {
+		sum += a[i] * b[i]
+	}
+	return sum
+}
+
+// ClusterOverlap for the two articles.
+// care about the # of overlapping clusers and the "strength" of the overlapping clusters
+// strength is how compact the cluster is
+func ClusterOverlap(main, related map[string]word2vec.Vector) float64 {
 	mainVecs, _ := buildFeatureArray(main, mainArticleID)
 	relatedVecs, _ := buildFeatureArray(related, relatedArticleID)
 
@@ -199,16 +235,58 @@ func ClusterOverlap(main, related map[string]word2vec.Vector) {
 	}
 
 	//doClusterOverlap(allVecs, meanshift.NewUniform(1.15))
-	doClusterOverlap(allVecs, meanshift.NewTruncGauss(0.65, 3.0))
 
-	dot(main, main, "Psychiatry", "Psychology")
-	dot(main, main, "Psychiatry", "Mental_health")
-	dot(main, main, "Psychology", "Mental_health")
+	features := toDistVec(allVecs)
+	clusterer := doClusterOverlap(features, meanshift.NewTruncGauss(0.20, 3.0))
 
+	numOverlaps := 0.0
+	score := 0.0
+	for _, c := range clusterer.Centers() {
+		fmt.Println("")
+
+		hasMain := false
+		hasRel := false
+
+		//
+
+		numMains := 0
+		for _, i := range c.Members() {
+			f := features[i]
+			fmt.Println(f.which, f.id)
+
+			if f.which == mainArticleID {
+				hasMain = true
+				numMains++
+			} else {
+				hasRel = true
+			}
+		}
+
+		if hasMain && hasRel {
+			numOverlaps++
+			score += float64(len(c.Members()))
+		}
+	}
+	fmt.Println("score:", score, "overlaps:", numOverlaps)
+	return score
+
+	/*
+		dot(main, main, "Psychiatry", "Psychology")
+		dot(main, main, "Psychiatry", "Mental_health")
+		dot(main, main, "Psychology", "Mental_health")
+
+	*/
 }
 
 func dot(main, related map[string]word2vec.Vector, a, b string) {
-	fmt.Println(a, "dot", b, "=", main[a].Dot(related[b]))
+	/*
+		av := main[a]
+		bv := related[b]
+
+		avc := doCastVec(av)
+		bvc := doCastVec(bv)
+	*/
+	fmt.Println(a, "dot", b, "=", main[a].Dot(related[b])) //, dotVecs(avc, bvc))
 }
 
 // Cluster similar words
