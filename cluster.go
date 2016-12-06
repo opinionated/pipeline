@@ -198,16 +198,11 @@ func doCluster(words map[string]word2vec.Vector, shifter meanshift.Shifter) {
 	}
 }
 
-func doClusterOverlap(features Features, shifter meanshift.Shifter) cluster.Clusterer {
+func doClusterOverlap(features Features, shifter meanshift.Shifter) (cluster.Clusterer, error) {
 	//fmt.Println("===========================")
 	ms := meanshift.New(features, shifter, 0.01, 15)
 	err := ms.Cluster()
-	if err != nil {
-		panic(err)
-	}
-
-	return ms
-
+	return ms, err
 }
 
 func dotVecs(a, b []float64) float64 {
@@ -237,7 +232,10 @@ func ClusterOverlap(main, related map[string]word2vec.Vector) (float32, int) {
 	//doClusterOverlap(allVecs, meanshift.NewUniform(1.15))
 
 	features := toDistVec(allVecs)
-	clusterer := doClusterOverlap(features, meanshift.NewTruncGauss(0.20, 3.0))
+	clusterer, err := doClusterOverlap(features, meanshift.NewTruncGauss(0.20, 3.0))
+	if err != nil {
+		return 0.0, 0
+	}
 
 	numOverlaps := 0
 	var score float32

@@ -438,14 +438,14 @@ func TestFull(t *testing.T) {
 	//pipe.AddStage(&entityIDFModule)
 	//pipe.AddStage(&conceptIDFModule)
 	//pipe.AddStage(&threshModule)
-	//pipe.AddStage(&entityWVModule)
-	//pipe.AddStage(&conceptWVModule)
+	pipe.AddStage(&entityWVModule)
+	pipe.AddStage(&conceptWVModule)
+	pipe.AddStage(&lastThreshModule)
 	pipe.AddStage(&keyWVModule)
 
 	// thresh then do finer methods
 	//pipe.AddStage(&keyModule)
 	//pipe.AddStage(&entityModule)
-	//pipe.AddStage(&lastThreshModule)
 
 	// build the story
 	assert.Nil(t, relationDB.Open("http://localhost:7474"))
