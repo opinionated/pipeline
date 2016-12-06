@@ -3,7 +3,6 @@ package pipeline_test
 import (
 	"container/heap"
 	"fmt"
-	"github.com/opinionated/analyzer-core/analyzer"
 	"github.com/opinionated/pipeline"
 	"github.com/opinionated/pipeline/analyzer/dbInterface"
 	"github.com/stretchr/testify/assert"
@@ -184,9 +183,49 @@ func storyDriver(
 	}
 }
 
+type articleScorePair struct {
+	score   float32
+	article pipeline.Article
+}
+
+type articleScoreHeap []articleScorePair
+
+func (h articleScoreHeap) Len() int {
+	return len(h)
+}
+func (h articleScoreHeap) Less(i, j int) bool {
+	return h[i].score < h[j].score
+}
+func (h articleScoreHeap) Swap(i, j int) {
+	h[i], h[j] = h[j], h[i]
+}
+
+func (h *articleScoreHeap) Push(x interface{}) {
+	item := x.(articleScorePair)
+	*h = append(*h, item)
+}
+
+func (h *articleScoreHeap) Pop() interface{} {
+	old := *h
+	n := len(old)
+	item := old[n-1]
+	*h = old[0 : n-1]
+	return item
+}
+
+func (h articleScoreHeap) Min() float32 {
+	return h[0].score
+
+}
+
+var _ heap.Interface = (*articleScoreHeap)(nil)
+
 // only gets the top #num articles from the articles list
-func heapFilter(articles []pipeline.Article, num int) []pipeline.Article {
-	mheap := make(analyzer.Heap, 0)
+func heapFilter(articles []pipeline.Article,
+	scoreFuncs map[string]func(pipeline.Score) float32,
+	weightMap map[string]float32, num int) []pipeline.Article {
+
+	mheap := make(articleScoreHeap, 0, num)
 	if mheap == nil {
 		panic("oh nose, nil heap!")
 	}
@@ -194,26 +233,27 @@ func heapFilter(articles []pipeline.Article, num int) []pipeline.Article {
 	fmt.Println("made it!")
 	heap.Init(&mheap)
 
-	// TODO: impl heap for pipeline articles
-	/*
-		for i := range articles {
-			if mheap.Len() == num {
-				if articles[i].Score > mheap.Peek().Score {
-					heap.Pop(&mheap)
-					heap.Push(&mheap, &articles[i])
-				}
-			} else {
-				heap.Push(&mheap, &articles[i])
-			}
+	for _, article := range articles {
+		score := scoreArticle(&article, scoreFuncs, weightMap)
+
+		fmt.Println("len:", mheap.Len())
+		if mheap.Len() > 0 && score < mheap.Min() {
+			continue
 		}
 
-		ret := make([]pipeline.Article, num)
-		for i := 0; i < num; i++ {
-			ret[i] = *heap.Pop(&mheap).(*pipeline.Article)
+		if mheap.Len() == num {
+			mheap.Pop()
 		}
-	*/
+		mheap.Push(articleScorePair{score, article})
+	}
 
-	return articles
+	fmt.Println("through loop!")
+	ret := make([]pipeline.Article, num)
+	for i := range mheap {
+		fmt.Println("adding:", mheap[i].article.Name())
+		ret[i] = mheap[i].article
+	}
+	return ret
 }
 
 func ScoreAverage(neo pipeline.Score) float32 {
@@ -406,7 +446,7 @@ func TestFull(t *testing.T) {
 	// thresh then do finer methods
 	//pipe.AddStage(&keyModule)
 	//pipe.AddStage(&entityModule)
-	pipe.AddStage(&lastThreshModule)
+	//pipe.AddStage(&lastThreshModule)
 
 	// build the story
 	assert.Nil(t, relationDB.Open("http://localhost:7474"))
@@ -425,7 +465,7 @@ func TestFull(t *testing.T) {
 	fmt.Println(story.MainArticle.Name())
 
 	raw, err := storyDriver(pipe, story)
-	data := heapFilter(raw, 20)
+	data := heapFilter(raw, scoreFuncs, weightMap, 20)
 
 	// only get the top couple of articles
 
