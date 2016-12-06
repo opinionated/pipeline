@@ -71,31 +71,56 @@ func (na WordVecAnalyzer) getScore(main []string, related []string) (float32, in
 	var totalScore float32
 	totalScore = 0.0
 	totalCount := 0
-	for i := range main {
-		for j := range related {
+	/*
+		for i := range main {
+			for j := range related {
 
-			if main[i] == related[j] {
-				continue
-			}
+				if main[i] == related[j] {
+					continue
+				}
 
-			a := word2vec.Expr{}
-			a.Add(1, main[i])
+				a := word2vec.Expr{}
+				a.Add(1, main[i])
 
-			b := word2vec.Expr{}
-			b.Add(1, related[j])
+				b := word2vec.Expr{}
+				b.Add(1, related[j])
 
-			score, err := na.client.Cos(a, b)
-			if err != nil {
-				continue
-			}
+				score, err := na.client.Cos(a, b)
+				if err != nil {
+					continue
+				}
 
-			if score > 0.5 {
-				//fmt.Println("similarity:", main[i], related[j], score)
-				totalCount++
-				totalScore += score
+				if score > 0.5 {
+					//fmt.Println("similarity:", main[i], related[j], score)
+					totalCount++
+					totalScore += score
+				}
 			}
 		}
+	*/
+
+	/*
+		bigExp := word2vec.Expr{}
+		for i := range main {
+			bigExp.Add(1, main[i])
+		}
+
+		relExp := word2vec.Expr{}
+		for i := range related {
+			relExp.Add(1, related[i])
+		}
+		_, _ = na.client.Cos(bigExp, relExp)
+	*/
+	mainVecs, err := na.client.Vectors(main)
+	if err != nil {
+		panic(err)
 	}
+
+	relatedVecs, err := na.client.Vectors(related)
+	//Cluster(relatedVecs)
+	totalScore, totalCount = ClusterOverlap(mainVecs, relatedVecs)
+	//_, _ = na.client.CosN(bigExp, len(main))
+	//_, _ = na.client.CosN(relExp, len(main))
 
 	return totalScore, totalCount, nil
 }
