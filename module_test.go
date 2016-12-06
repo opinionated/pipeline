@@ -214,7 +214,7 @@ func (h *articleScoreHeap) Pop() interface{} {
 }
 
 func (h articleScoreHeap) Min() float32 {
-	return h[0].score
+	return h[h.Len()-1].score
 
 }
 
@@ -236,7 +236,6 @@ func heapFilter(articles []pipeline.Article,
 	for _, article := range articles {
 		score := scoreArticle(&article, scoreFuncs, weightMap)
 
-		fmt.Println("len:", mheap.Len())
 		if mheap.Len() > 0 && score < mheap.Min() {
 			continue
 		}
@@ -248,10 +247,10 @@ func heapFilter(articles []pipeline.Article,
 	}
 
 	fmt.Println("through loop!")
-	ret := make([]pipeline.Article, num)
+	ret := make([]pipeline.Article, 0, num)
 	for i := range mheap {
 		fmt.Println("adding:", mheap[i].article.Name())
-		ret[i] = mheap[i].article
+		ret = append(ret, mheap[i].article)
 	}
 	return ret
 }
@@ -458,14 +457,14 @@ func TestFull(t *testing.T) {
 	set := testSet{
 		mainArticle: "The Horror in San Bernardino",
 		//mainArticle:     "Fear Ignorance, Not Muslims",
-		relatedArticles: articles[0:15],
+		relatedArticles: articles[0:100],
 	}
 
 	story := storyFromSet(set)
 	fmt.Println(story.MainArticle.Name())
 
 	raw, err := storyDriver(pipe, story)
-	data := heapFilter(raw, scoreFuncs, weightMap, 20)
+	data := heapFilter(raw, scoreFuncs, weightMap, 10)
 
 	// only get the top couple of articles
 
@@ -480,6 +479,7 @@ func TestFull(t *testing.T) {
 }
 
 func printArticle(article pipeline.Article) {
+
 	keys := article.Keys()
 	for _, key := range keys {
 		score, _ := article.GetScore(key)

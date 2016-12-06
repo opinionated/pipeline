@@ -199,8 +199,8 @@ func doCluster(words map[string]word2vec.Vector, shifter meanshift.Shifter) {
 }
 
 func doClusterOverlap(features Features, shifter meanshift.Shifter) cluster.Clusterer {
-	fmt.Println("===========================")
-	ms := meanshift.New(features, shifter, 0.01, 10)
+	//fmt.Println("===========================")
+	ms := meanshift.New(features, shifter, 0.01, 15)
 	err := ms.Cluster()
 	if err != nil {
 		panic(err)
@@ -221,7 +221,7 @@ func dotVecs(a, b []float64) float64 {
 // ClusterOverlap for the two articles.
 // care about the # of overlapping clusers and the "strength" of the overlapping clusters
 // strength is how compact the cluster is
-func ClusterOverlap(main, related map[string]word2vec.Vector) float64 {
+func ClusterOverlap(main, related map[string]word2vec.Vector) (float32, int) {
 	mainVecs, _ := buildFeatureArray(main, mainArticleID)
 	relatedVecs, _ := buildFeatureArray(related, relatedArticleID)
 
@@ -239,10 +239,10 @@ func ClusterOverlap(main, related map[string]word2vec.Vector) float64 {
 	features := toDistVec(allVecs)
 	clusterer := doClusterOverlap(features, meanshift.NewTruncGauss(0.20, 3.0))
 
-	numOverlaps := 0.0
-	score := 0.0
+	numOverlaps := 0
+	var score float32
 	for _, c := range clusterer.Centers() {
-		fmt.Println("")
+		//fmt.Println("")
 
 		hasMain := false
 		hasRel := false
@@ -252,7 +252,7 @@ func ClusterOverlap(main, related map[string]word2vec.Vector) float64 {
 		numMains := 0
 		for _, i := range c.Members() {
 			f := features[i]
-			fmt.Println(f.which, f.id)
+			//fmt.Println(f.which, f.id)
 
 			if f.which == mainArticleID {
 				hasMain = true
@@ -264,11 +264,11 @@ func ClusterOverlap(main, related map[string]word2vec.Vector) float64 {
 
 		if hasMain && hasRel {
 			numOverlaps++
-			score += float64(len(c.Members()))
+			score += float32(len(c.Members()))
 		}
 	}
-	fmt.Println("score:", score, "overlaps:", numOverlaps)
-	return score
+	//fmt.Println("score:", score, "overlaps:", numOverlaps)
+	return score, numOverlaps
 
 	/*
 		dot(main, main, "Psychiatry", "Psychology")
@@ -300,6 +300,7 @@ func Cluster(words map[string]word2vec.Vector) {
 	doKMean(words)
 	//doCluster(words, meanshift.NewUniform(6.2))
 
+	// TODO: catch meanshift itr issue
 	doCluster(words, meanshift.NewTruncGauss(0.60, 2.5))
 	//doCluster(words, meanshift.NewTruncGauss(1.20, 2.30))
 

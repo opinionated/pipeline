@@ -118,7 +118,7 @@ func (na WordVecAnalyzer) getScore(main []string, related []string) (float32, in
 
 	relatedVecs, err := na.client.Vectors(related)
 	//Cluster(relatedVecs)
-	ClusterOverlap(mainVecs, relatedVecs)
+	totalScore, totalCount = ClusterOverlap(mainVecs, relatedVecs)
 	//_, _ = na.client.CosN(bigExp, len(main))
 	//_, _ = na.client.CosN(relExp, len(main))
 
