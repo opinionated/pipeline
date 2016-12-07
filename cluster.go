@@ -190,7 +190,7 @@ func ClusterOverlap(main, related map[string]word2vec.Vector, mainRelevance, rel
 
 	//features := toDistVec(allVecs)
 	features := allVecs
-	shifter := meanshift.NewTruncGauss(0.80, 0.1)
+	shifter := meanshift.NewTruncGauss(0.60, 2.0)
 	//shifter := meanshift.NewTruncGauss(0.15, 0.1)
 	//shifter := meanshift.NewUniform(0.95)
 	clusterer := meanshift.New(features, shifter, 0.01, 10)
@@ -249,9 +249,32 @@ func ClusterOverlap(main, related map[string]word2vec.Vector, mainRelevance, rel
 
 			clusterStrength := float32(withinArr[whichCluster])
 			if clusterStrength > 0.000000000001 {
-				fmt.Println(clusterStrength, numMains, numRels, relSignificance)
+				//fmt.Println(clusterStrength, numMains, numRels, relSignificance)
 			}
 
+			// dot each vector with every other vector, calc the avg direction
+
+			clusterStrength = 0
+			for li, i := range c.Members() {
+				f := features[i]
+				if f.which == 2 {
+				}
+				var dsum float32
+				dsum = 0
+				for lj, j := range c.Members() {
+					if li == lj {
+						continue
+					}
+					ff := features[j]
+					if ff.which == 1 {
+					}
+					dsum += float32(dotVecs(f.data, ff.data))
+				}
+				clusterStrength += dsum
+			}
+			denom := float32(len(c.Members())*len(c.Members()) - len(c.Members()))
+			clusterStrength = float32(math.Sqrt(float64(clusterStrength / denom)))
+			//clusterStrength = float32((float64(clusterStrength / float32(numMains*numRels))))
 			// calc the dist b/w the vecs
 			//score += mainSignificance + relSignificance
 			//score += (mainSquaredQuality + relatedSquaredQuality) / float32(numRels)+numMains)
@@ -263,8 +286,19 @@ func ClusterOverlap(main, related map[string]word2vec.Vector, mainRelevance, rel
 			//score += float32(numRels) + float32(numMains)
 			//score += relatedQuality + mainQuality
 			// how relevant a cluster is to its artice * how strong the connections are
-			score += (relSignificance*(mainQuality/float32(numMains)) + mainSignificance*(relatedQuality/float32(numRels))) * (1 - clusterStrength)
-			//score += (relSignificance*(mainQuality/float32(numMains)) + mainSignificance*(relatedQuality/float32(numRels)))
+			//score += (relSignificance*(mainQuality/float32(numMains)) + mainSignificance*(relatedQuality/float32(numRels))) * (1 - clusterStrength)
+			relMain := relSignificance * (mainQuality / float32(numMains))
+			mainRel := mainSignificance * (relatedQuality / float32(numRels))
+			toAdd := (relMain + mainRel) * clusterStrength
+			score += (toAdd * 1)
+			fmt.Println(clusterStrength/float32(numMains*numRels), numMains, numRels, denom)
+
+			if mainSquaredQuality/float32(numMains) < relatedSquaredQuality/float32(numRels) {
+
+				score += relMain * 0
+			} else {
+				score += mainRel * 0
+			}
 			//score += mainSquaredQuality + relatedSquaredQuality
 
 			/*

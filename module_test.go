@@ -277,9 +277,9 @@ func SquareFlow(neo pipeline.Score) float32 {
 		panic("failed to convert neo score!")
 	}
 
-	//	return score.Flow * score.Flow * float32(score.Count)
+	//return score.Flow * score.Flow * float32(score.Count)
 	if score.Count > 0 {
-		//	val := score.Flow * float32(score.Count)
+		//val := score.Flow / float32(score.Count)
 		val := score.Flow
 		return val
 	}
@@ -480,7 +480,7 @@ func TestFull(t *testing.T) {
 	set := testSet{
 		//mainArticle: "The Horror in San Bernardino",
 		mainArticle:     "Fear Ignorance, Not Muslims",
-		relatedArticles: articles[0:90],
+		relatedArticles: articles[0:50],
 	}
 	//fmt.Println(articles[37:40])
 
