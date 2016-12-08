@@ -72,6 +72,8 @@ func (na WordVecAnalyzer) getScore(main, related []relationDB.KeywordRelation) (
 	totalScore = 0.0
 	totalCount := 0
 
+	// build maps for the data
+	// TODO: refactor and cleanup
 	mainStrs := make([]string, len(main))
 	relatedStrs := make([]string, len(related))
 	mainMap := make(map[string]float32)
@@ -86,12 +88,16 @@ func (na WordVecAnalyzer) getScore(main, related []relationDB.KeywordRelation) (
 		relatedMap[related[i].Identifier] = related[i].Relevance
 	}
 
+	// TODO: clean up err handling
 	mainVecs, err := na.client.Vectors(mainStrs)
 	if err != nil {
 		panic(err)
 	}
 
 	relatedVecs, err := na.client.Vectors(relatedStrs)
+	if err != nil {
+		panic(err)
+	}
 
 	totalScore, totalCount = ClusterOverlap(mainVecs, relatedVecs, mainMap, relatedMap)
 
@@ -101,7 +107,6 @@ func (na WordVecAnalyzer) getScore(main, related []relationDB.KeywordRelation) (
 // Analyze the  relation between two articles with the score func
 func (na *WordVecAnalyzer) Analyze(main Article,
 	related *Article) (bool, error) {
-	//na.tryInv(main, related)
 	mainStrs, err := na.getFixedStrs(main)
 	if err != nil {
 		return false, err
@@ -117,7 +122,6 @@ func (na *WordVecAnalyzer) Analyze(main Article,
 	}
 
 	score, count, err := na.getScore(mainStrs, relStrs)
-	//fmt.Println("related:", related.name, "totalScore:", score, count)
 
 	scoreStruct := NeoScore{score, count}
 	err = related.AddScore("wordvec_"+na.MetadataType, scoreStruct)

@@ -2,7 +2,6 @@ package pipeline
 
 import (
 	"fmt"
-	"github.com/biogo/cluster/cluster"
 	"github.com/biogo/cluster/meanshift"
 	"github.com/opinionated/word2vec"
 	"math"
@@ -56,47 +55,44 @@ func printVec(vec []float64) {
 	}
 }
 
+// sum two vectors
 func addVecs(a, b word2vec.Vector) []float64 {
 	result := make([]float64, len(a))
-	//a.Normalise()
-	//b.Normalise()
 	for i := range a {
 		result[i] = float64(a[i] - b[i])
 	}
 	return result
 }
 
+// calculate teh manhattan distance (L1) between two vectors
 func manDist(a, b []float64) float64 {
 	sum := 0.0
-
 	for i := range a {
 		sum += math.Abs(a[i] - b[i])
 	}
-
 	return sum
 
 }
+
+// square all the elements in the vector
 func squareVec(a word2vec.Vector) []float64 {
 	result := make([]float64, len(a))
-	//a.Normalise()
 	for i := range a {
 		result[i] = float64(a[i] * a[i])
-		//result[i] = math.Sqrt(float64(a[i]))
 	}
 	return result
 }
 
+// cast a vector ([]float32) to []float64
 func doCastVec(a word2vec.Vector) []float64 {
 	result := make([]float64, len(a))
-	//a.Normalise()
 	for i := range a {
 		result[i] = float64(a[i])
-		//result[i] = math.Sqrt(float64(a[i]))
 	}
 	return result
 }
 
-// takes in a features vec and converts to dist
+// takes in a features vec and converts to a sort of covariance thing
 func toDistVec(main Features) Features {
 
 	ret := make(Features, len(main))
@@ -106,7 +102,6 @@ func toDistVec(main Features) Features {
 		slot := make([]float64, len(main))
 		for j := range main {
 			slot[j] = dotVecs(main[i].data, main[j].data)
-			//slot[j] = slot[j] * slot[j]
 			if i == j {
 				slot[j] = 0.5
 			}
@@ -123,35 +118,13 @@ func buildFeatureArray(words map[string]word2vec.Vector, relevances map[string]f
 	idx := 0
 	for key, vec := range words {
 		vec.Normalise()
-		/*
-			castVec := make([]float64, len(vec))
-			for i := range vec {
-				castVec[i] = float64(vec[i])
-			}
-		*/
 		castVec := doCastVec(vec)
-		//castVec := squareVec(vec)
 
 		ret[idx] = Feature{id: key, data: castVec, relevance: relevances[key], which: which}
 		idx++
 	}
 
 	return ret, nil
-}
-
-func doClusterOverlap(features Features, shifter meanshift.Shifter) (cluster.Clusterer, error) {
-	//fmt.Println("===========================")
-	ms := meanshift.New(features, shifter, 0.10, 10)
-	//ms, _ := kmeans.New(features)
-	/*
-		if len(features) > 10 {
-			ms.Seed(4)
-		} else {
-			ms.Seed(3)
-		}
-	*/
-	err := ms.Cluster()
-	return ms, err
 }
 
 func dotVecs(a, b []float64) float64 {
@@ -163,8 +136,8 @@ func dotVecs(a, b []float64) float64 {
 }
 
 // ClusterOverlap for the two articles.
-// care about the # of overlapping clusers and the "strength" of the overlapping clusters
-// strength is how compact the cluster is
+// Care about the # of overlapping clusers and the "strength" of the overlapping clusters.
+// Calc strength based on relevance of the words in the cluster and the properties of the cluster its self.
 func ClusterOverlap(main, related map[string]word2vec.Vector, mainRelevance, relatedRelevance map[string]float32) (float32, int) {
 	mainVecs, _ := buildFeatureArray(main, mainRelevance, mainArticleID)
 	relatedVecs, _ := buildFeatureArray(related, relatedRelevance, relatedArticleID)
@@ -182,17 +155,14 @@ func ClusterOverlap(main, related map[string]word2vec.Vector, mainRelevance, rel
 		totalRelatedRel += relatedVecs[i].relevance
 	}
 
+	// need to have some kind of total relevance
 	if totalRelatedRel < 0.0001 || totalMainRel < 0.0001 {
 		return 0.0, 0
 	}
 
-	//doClusterOverlap(allVecs, meanshift.NewUniform(1.15))
-
-	//features := toDistVec(allVecs)
+	// TODO: look into adaptive bandwidth stuff
 	features := allVecs
-	shifter := meanshift.NewTruncGauss(0.60, 2.0)
-	//shifter := meanshift.NewTruncGauss(0.15, 0.1)
-	//shifter := meanshift.NewUniform(0.95)
+	shifter := meanshift.NewTruncGauss(0.60, 2.6010)
 	clusterer := meanshift.New(features, shifter, 0.01, 10)
 	err := clusterer.Cluster()
 
@@ -203,41 +173,28 @@ func ClusterOverlap(main, related map[string]word2vec.Vector, mainRelevance, rel
 
 	numOverlaps := 0
 	var score float32
-	//	fmt.Println("==========================")
 
-	withinArr := clusterer.Within()
-	for whichCluster, c := range clusterer.Centers() {
-
-		hasMain := false
-		hasRel := false
-		//		fmt.Println("")
+	for _, c := range clusterer.Centers() {
 
 		numMains := 0
 		numRels := 0
 		var mainQuality float32
 		var relatedQuality float32
-		var mainSquaredQuality float32
-		var relatedSquaredQuality float32
-		mainQuality = 0
-		relatedQuality = 0
+
 		for _, i := range c.Members() {
 			f := features[i]
-			//			fmt.Println(f.which, f.id)
 
 			if f.which == mainArticleID {
-				hasMain = true
 				numMains++
 				mainQuality += f.relevance
-				mainSquaredQuality += f.relevance * f.relevance
 			} else {
-				hasRel = true
 				numRels++
 				relatedQuality += f.relevance
-				relatedSquaredQuality += f.relevance * f.relevance
 			}
 		}
 
-		if hasMain && hasRel {
+		// found at least one of each article in the cluster
+		if numMains > 0 && numRels > 0 {
 			numOverlaps++
 
 			// how much of each story this cluster "captures"
@@ -247,83 +204,37 @@ func ClusterOverlap(main, related map[string]word2vec.Vector, mainRelevance, rel
 				panic("sig too low!!!")
 			}
 
-			clusterStrength := float32(withinArr[whichCluster])
-			if clusterStrength > 0.000000000001 {
-				//fmt.Println(clusterStrength, numMains, numRels, relSignificance)
-			}
-
-			// dot each vector with every other vector, calc the avg direction
-
-			clusterStrength = 0
-			for li, i := range c.Members() {
+			// find cluster strength by doing a cluster covariance
+			// clusterstrength is always [0:1]
+			var clusterStrength float32
+			for _, i := range c.Members() {
 				f := features[i]
-				if f.which == 2 {
-				}
 				var dsum float32
-				dsum = 0
-				for lj, j := range c.Members() {
-					if li == lj {
+				for _, j := range c.Members() {
+					if i == j {
 						continue
 					}
 					ff := features[j]
-					if ff.which == 1 {
-					}
 					dsum += float32(dotVecs(f.data, ff.data))
 				}
 				clusterStrength += dsum
 			}
+
+			if clusterStrength < 0 {
+				panic("oh nose!!! expected to only have pos vals")
+			}
+
+			// denom is num itrs run, sub len c b/c we don't mul by ourselves
+			// len(c) can't be one, so denom calc is OK
 			denom := float32(len(c.Members())*len(c.Members()) - len(c.Members()))
 			clusterStrength = float32(math.Sqrt(float64(clusterStrength / denom)))
-			//clusterStrength = float32((float64(clusterStrength / float32(numMains*numRels))))
-			// calc the dist b/w the vecs
-			//score += mainSignificance + relSignificance
-			//score += (mainSquaredQuality + relatedSquaredQuality) / float32(numRels)+numMains)
-			//score += (relatedQuality / float32(numRels)) + (relatedQuality / float32(numMains))
-			//score += ((relatedSquaredQuality / float32(numRels)) + (mainSquaredQuality / float32(numMains))) / 2
-			//score += (1 * relSignificance * float32(numRels)) + (1 * mainSignificance * float32(numMains))
-			score += ((0 * relSignificance * float32(1)) + (0*mainSignificance*float32(1))*clusterStrength*0) / 2.0
-			//score += (1 * relSignificance * float32(relatedQuality)) + (1 * mainSignificance * float32(mainQuality))
-			//score += float32(numRels) + float32(numMains)
-			//score += relatedQuality + mainQuality
-			// how relevant a cluster is to its artice * how strong the connections are
-			//score += (relSignificance*(mainQuality/float32(numMains)) + mainSignificance*(relatedQuality/float32(numRels))) * (1 - clusterStrength)
+
+			// link from a => b = %rel(a) * avg rel(b)
 			relMain := relSignificance * (mainQuality / float32(numMains))
 			mainRel := mainSignificance * (relatedQuality / float32(numRels))
-			toAdd := (relMain + mainRel) * clusterStrength
-			score += (toAdd * 1)
-			fmt.Println(clusterStrength/float32(numMains*numRels), numMains, numRels, denom)
-
-			if mainSquaredQuality/float32(numMains) < relatedSquaredQuality/float32(numRels) {
-
-				score += relMain * 0
-			} else {
-				score += mainRel * 0
-			}
-			//score += mainSquaredQuality + relatedSquaredQuality
-
-			/*
-				if mainSignificance < relSignificance {
-					score += relatedScore
-				} else {
-					score += mainScore
-				}
-			*/
-
-			//score += float32(math.Max(float64(mainSignificance), float64(relSignificance)))
-			//score += float32(len(c.Members()))
+			score += (relMain + mainRel) * clusterStrength
 		}
 	}
 
 	return score, numOverlaps
-}
-
-func dot(main, related map[string]word2vec.Vector, a, b string) {
-	/*
-		av := main[a]
-		bv := related[b]
-
-		avc := doCastVec(av)
-		bvc := doCastVec(bv)
-	*/
-	fmt.Println(a, "dot", b, "=", main[a].Dot(related[b])) //, dotVecs(avc, bvc))
 }
