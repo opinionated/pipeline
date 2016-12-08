@@ -437,7 +437,7 @@ func TestFull(t *testing.T) {
 	weightMap["idf_Entity"] = 10.0
 	weightMap["idf_Concept"] = 10.0
 	weightMap["wordvec_Taxonomy"] = 10.0
-	weightMap["wordvec_Concept"] = 10.0
+	weightMap["wordvec_Concept"] = 15.0
 	weightMap["wordvec_Keyword"] = 10.0
 	weightMap["wordvec_Entity"] = 10.0
 
@@ -455,7 +455,7 @@ func TestFull(t *testing.T) {
 	// 1.1 seems to do it for words
 
 	// do coarse methods
-	//pipe.AddStage(&taxModule)
+	//	pipe.AddStage(&taxModule)
 	//pipe.AddStage(&conceptsModule)
 	//pipe.AddStage(&keyIDFModule)
 	//pipe.AddStage(&entityIDFModule)
@@ -479,10 +479,19 @@ func TestFull(t *testing.T) {
 
 	set := testSet{
 		//mainArticle: "The Horror in San Bernardino",
-		mainArticle:     "Fear Ignorance, Not Muslims",
-		relatedArticles: articles[0:50],
+		mainArticle: "Fear Ignorance, Not Muslims",
+		//mainArticle:     "Ted ‘Carpet-Bomb’ Cruz",
+		//mainArticle: "Deregulating Corporate America",
+		//mainArticle: "Course Correction for School Testing",
+		//mainArticle: "If New York Really Wants to Help the Homeless",
+		//mainArticle: "Social Security in an Election Year",
+		//mainArticle: "The Reproductive Rights Rollback of 2015",
+		//mainArticle: "Strong Unions, Strong Democracy",
+		//mainArticle: "Voter Fatigue in New York",
+		//mainArticle: "Depraved Indifference Toward Flint",
+
+		relatedArticles: articles,
 	}
-	//fmt.Println(articles[37:40])
 
 	story := storyFromSet(set)
 	fmt.Println(story.MainArticle.Name())
