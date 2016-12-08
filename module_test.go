@@ -188,6 +188,7 @@ type articleScorePair struct {
 	article pipeline.Article
 }
 
+// min heap, lowest value on end
 type articleScoreHeap []articleScorePair
 
 func (h articleScoreHeap) Len() int {
@@ -196,6 +197,7 @@ func (h articleScoreHeap) Len() int {
 func (h articleScoreHeap) Less(i, j int) bool {
 	return h[i].score < h[j].score
 }
+
 func (h articleScoreHeap) Swap(i, j int) {
 	h[i], h[j] = h[j], h[i]
 }
@@ -214,8 +216,7 @@ func (h *articleScoreHeap) Pop() interface{} {
 }
 
 func (h articleScoreHeap) Min() float32 {
-	return h[h.Len()-1].score
-
+	return h[0].score
 }
 
 var _ heap.Interface = (*articleScoreHeap)(nil)
@@ -225,32 +226,35 @@ func heapFilter(articles []pipeline.Article,
 	scoreFuncs map[string]func(pipeline.Score) float32,
 	weightMap map[string]float32, num int) []pipeline.Article {
 
-	mheap := make(articleScoreHeap, 0, num)
+	mheap := &articleScoreHeap{}
 	if mheap == nil {
 		panic("oh nose, nil heap!")
 	}
 
 	fmt.Println("made it!")
-	heap.Init(&mheap)
+	heap.Init(mheap)
 
 	for _, article := range articles {
 		score := scoreArticle(&article, scoreFuncs, weightMap)
 
-		if mheap.Len() > 0 && score < mheap.Min() {
-			continue
+		// need to make sure the size stays the same
+
+		//mheap.Push(articleScorePair{score, article})
+		heap.Push(mheap, articleScorePair{score, article})
+		if mheap.Len() > num {
+			// going onto the heap
+			//mheap.Pop()
+			heap.Pop(mheap)
 		}
 
-		if mheap.Len() == num {
-			mheap.Pop()
-		}
-		mheap.Push(articleScorePair{score, article})
 	}
 
 	fmt.Println("through loop!")
 	ret := make([]pipeline.Article, 0, num)
-	for i := range mheap {
-		fmt.Println("adding:", mheap[i].article.Name())
-		ret = append(ret, mheap[i].article)
+	for mheap.Len() > 0 {
+		item := heap.Pop(mheap).(articleScorePair)
+		fmt.Println(item.article.Name(), item.score)
+		ret = append(ret, item.article)
 	}
 	return ret
 }
@@ -262,7 +266,7 @@ func ScoreAverage(neo pipeline.Score) float32 {
 	}
 
 	if score.Count > 0 {
-		return score.Flow / float32(score.Count)
+		return score.Flow * float32(score.Count)
 	}
 	return 0
 }
@@ -273,10 +277,11 @@ func SquareFlow(neo pipeline.Score) float32 {
 		panic("failed to convert neo score!")
 	}
 
-	//	return score.Flow * score.Flow * float32(score.Count)
+	//return score.Flow * score.Flow * float32(score.Count)
 	if score.Count > 0 {
-		val := score.Flow / float32(score.Count)
-		return val * val
+		//val := score.Flow / float32(score.Count)
+		val := score.Flow
+		return val
 	}
 	return 0
 }
@@ -310,6 +315,24 @@ func IDFAverage(idf pipeline.Score) float32 {
 	}
 
 	return sum
+}
+
+func smoothScoreArticle(article *pipeline.Article, funcs map[string]func(pipeline.Score) float32, weights map[string]float32) float32 {
+	keys := article.Keys()
+
+	var articleScore float32
+	for _, key := range keys {
+		scoreFunc, fok := funcs[key]
+		weight, wok := weights[key]
+		if !fok || !wok {
+			panic("key " + key + "is not in funcs")
+		}
+
+		score, _ := article.GetScore(key)
+		articleScore += scoreFunc(score) * weight
+	}
+
+	return articleScore
 }
 
 func scoreArticle(article *pipeline.Article, funcs map[string]func(pipeline.Score) float32, weights map[string]float32) float32 {
@@ -414,7 +437,7 @@ func TestFull(t *testing.T) {
 	weightMap["idf_Entity"] = 10.0
 	weightMap["idf_Concept"] = 10.0
 	weightMap["wordvec_Taxonomy"] = 10.0
-	weightMap["wordvec_Concept"] = 10.0
+	weightMap["wordvec_Concept"] = 15.0
 	weightMap["wordvec_Keyword"] = 10.0
 	weightMap["wordvec_Entity"] = 10.0
 
@@ -422,7 +445,7 @@ func TestFull(t *testing.T) {
 	threshModule := pipeline.StandardModule{}
 	threshModule.SetFuncs(threshFunc)
 
-	lastThreshFunc := threshAnalyzer{7.0, scoreFuncs, weightMap}
+	lastThreshFunc := threshAnalyzer{0.0, scoreFuncs, weightMap}
 	lastThreshModule := pipeline.StandardModule{}
 	lastThreshModule.SetFuncs(lastThreshFunc)
 
@@ -432,7 +455,7 @@ func TestFull(t *testing.T) {
 	// 1.1 seems to do it for words
 
 	// do coarse methods
-	//pipe.AddStage(&taxModule)
+	//	pipe.AddStage(&taxModule)
 	//pipe.AddStage(&conceptsModule)
 	//pipe.AddStage(&keyIDFModule)
 	//pipe.AddStage(&entityIDFModule)
@@ -440,7 +463,7 @@ func TestFull(t *testing.T) {
 	//pipe.AddStage(&threshModule)
 	pipe.AddStage(&entityWVModule)
 	pipe.AddStage(&conceptWVModule)
-	pipe.AddStage(&lastThreshModule)
+	//pipe.AddStage(&lastThreshModule)
 	pipe.AddStage(&keyWVModule)
 
 	// thresh then do finer methods
@@ -455,15 +478,26 @@ func TestFull(t *testing.T) {
 	//assert.True(t, len(articles) > 150)
 
 	set := testSet{
-		mainArticle: "The Horror in San Bernardino",
-		//mainArticle:     "Fear Ignorance, Not Muslims",
-		relatedArticles: articles[0:100],
+		//mainArticle: "The Horror in San Bernardino",
+		mainArticle: "Fear Ignorance, Not Muslims",
+		//mainArticle:     "Ted ‘Carpet-Bomb’ Cruz",
+		//mainArticle: "Deregulating Corporate America",
+		//mainArticle: "Course Correction for School Testing",
+		//mainArticle: "If New York Really Wants to Help the Homeless",
+		//mainArticle: "Social Security in an Election Year",
+		//mainArticle: "The Reproductive Rights Rollback of 2015",
+		//mainArticle: "Strong Unions, Strong Democracy",
+		//mainArticle: "Voter Fatigue in New York",
+		//mainArticle: "Depraved Indifference Toward Flint",
+
+		relatedArticles: articles,
 	}
 
 	story := storyFromSet(set)
 	fmt.Println(story.MainArticle.Name())
 
 	raw, err := storyDriver(pipe, story)
+	fmt.Println("len of data comming out:", len(raw))
 	data := heapFilter(raw, scoreFuncs, weightMap, 10)
 
 	// only get the top couple of articles
@@ -471,7 +505,7 @@ func TestFull(t *testing.T) {
 	assert.Nil(t, err)
 	fmt.Println("main:", story.MainArticle.Name())
 	for i := range data {
-		fmt.Println(data[i].Name())
+		fmt.Println(i, data[i].Name())
 		printArticle(data[i])
 		fmt.Println("total score:", scoreArticle(&data[i], scoreFuncs, weightMap))
 		fmt.Println()

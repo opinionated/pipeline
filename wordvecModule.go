@@ -24,8 +24,8 @@ func (score WordVecScore) Serialize() []float32 {
 type WordVecAnalyzer struct {
 	MetadataType string
 	client       word2vec.Client
-	cache        []string
-	cacheArt     string
+	cache        []relationDB.KeywordRelation
+	cacheArt     relationDB.KeywordRelation
 }
 
 // Setup the connection to the neo db
@@ -46,8 +46,8 @@ func fixString(str string) string {
 	return strings.Replace(str, " ", "_", -1)
 }
 
-func (na WordVecAnalyzer) getFixedStrs(article Article) ([]string, error) {
-	if na.cacheArt == article.Name() {
+func (na WordVecAnalyzer) getFixedStrs(article Article) ([]relationDB.KeywordRelation, error) {
+	if na.cacheArt.Identifier == article.Name() {
 		return na.cache, nil
 	}
 
@@ -60,67 +60,46 @@ func (na WordVecAnalyzer) getFixedStrs(article Article) ([]string, error) {
 	}
 
 	for i := range strs {
-		strs[i] = fixString(strs[i])
+		strs[i].Identifier = fixString(strs[i].Identifier)
 	}
 
 	return strs, err
 }
 
-func (na WordVecAnalyzer) getScore(main []string, related []string) (float32, int, error) {
+func (na WordVecAnalyzer) getScore(main, related []relationDB.KeywordRelation) (float32, int, error) {
 
 	var totalScore float32
 	totalScore = 0.0
 	totalCount := 0
-	/*
-		for i := range main {
-			for j := range related {
 
-				if main[i] == related[j] {
-					continue
-				}
+	// build maps for the data
+	// TODO: refactor and cleanup
+	mainStrs := make([]string, len(main))
+	relatedStrs := make([]string, len(related))
+	mainMap := make(map[string]float32)
+	relatedMap := make(map[string]float32)
 
-				a := word2vec.Expr{}
-				a.Add(1, main[i])
+	for i := range main {
+		mainStrs = append(mainStrs, main[i].Identifier)
+		mainMap[main[i].Identifier] = main[i].Relevance
+	}
+	for i := range related {
+		relatedStrs = append(relatedStrs, related[i].Identifier)
+		relatedMap[related[i].Identifier] = related[i].Relevance
+	}
 
-				b := word2vec.Expr{}
-				b.Add(1, related[j])
-
-				score, err := na.client.Cos(a, b)
-				if err != nil {
-					continue
-				}
-
-				if score > 0.5 {
-					//fmt.Println("similarity:", main[i], related[j], score)
-					totalCount++
-					totalScore += score
-				}
-			}
-		}
-	*/
-
-	/*
-		bigExp := word2vec.Expr{}
-		for i := range main {
-			bigExp.Add(1, main[i])
-		}
-
-		relExp := word2vec.Expr{}
-		for i := range related {
-			relExp.Add(1, related[i])
-		}
-		_, _ = na.client.Cos(bigExp, relExp)
-	*/
-	mainVecs, err := na.client.Vectors(main)
+	// TODO: clean up err handling
+	mainVecs, err := na.client.Vectors(mainStrs)
 	if err != nil {
 		panic(err)
 	}
 
-	relatedVecs, err := na.client.Vectors(related)
-	//Cluster(relatedVecs)
-	totalScore, totalCount = ClusterOverlap(mainVecs, relatedVecs)
-	//_, _ = na.client.CosN(bigExp, len(main))
-	//_, _ = na.client.CosN(relExp, len(main))
+	relatedVecs, err := na.client.Vectors(relatedStrs)
+	if err != nil {
+		panic(err)
+	}
+
+	totalScore, totalCount = ClusterOverlap(mainVecs, relatedVecs, mainMap, relatedMap)
 
 	return totalScore, totalCount, nil
 }
@@ -128,13 +107,12 @@ func (na WordVecAnalyzer) getScore(main []string, related []string) (float32, in
 // Analyze the  relation between two articles with the score func
 func (na *WordVecAnalyzer) Analyze(main Article,
 	related *Article) (bool, error) {
-	//na.tryInv(main, related)
 	mainStrs, err := na.getFixedStrs(main)
 	if err != nil {
 		return false, err
 	}
 
-	if main.Name() != na.cacheArt {
+	if main.Name() != na.cacheArt.Identifier {
 		na.cache = mainStrs
 	}
 
@@ -144,7 +122,6 @@ func (na *WordVecAnalyzer) Analyze(main Article,
 	}
 
 	score, count, err := na.getScore(mainStrs, relStrs)
-	//fmt.Println("related:", related.name, "totalScore:", score, count)
 
 	scoreStruct := NeoScore{score, count}
 	err = related.AddScore("wordvec_"+na.MetadataType, scoreStruct)
@@ -152,17 +129,3 @@ func (na *WordVecAnalyzer) Analyze(main Article,
 }
 
 var _ StandardModuleAnalyzer = (*WordVecAnalyzer)(nil)
-
-func (na WordVecAnalyzer) tryInv(main Article, related *Article) {
-	strs, err := relationDB.GetRelations(
-		main.Name(),
-		na.MetadataType,
-		0.0)
-	if err != nil {
-		panic("bad bad")
-	}
-
-	for i := range strs {
-		strs[i] = fixString(strs[i])
-	}
-}

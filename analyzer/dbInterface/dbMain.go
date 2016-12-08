@@ -269,16 +269,26 @@ func GetAll() ([]string, error) {
 
 }
 
+// KeywordRelation includes keyword relation strength
+type KeywordRelation struct {
+	Identifier string  `json:"metadata"`
+	Relevance  float32 `json:"relevance"`
+}
+
 // GetRelations gets the metadata types comming out of an article.
-func GetRelations(article string, metadataType string, thresh float64) ([]string, error) {
-	result := []struct {
-		Identifier string `json:"metadata"`
-	}{}
+func GetRelations(article string, metadataType string, thresh float64) ([]KeywordRelation, error) {
+	/*
+		result := []struct {
+			Identifier string  `json:"metadata"`
+			Relevance  float32 `json:"relevance"`
+		}{}
+	*/
+	result := []KeywordRelation{}
 
 	statementStr := `
 		match (start:Article)-[r]-(key:MetadataType)
 		where r.Relevance > {thresh} and start.Identifier={article} 
-		return key.Text as metadata 
+		return key.Text as metadata, r.Relevance as relevance
 		`
 	cq := neoism.CypherQuery{
 		Statement:  fixLabel(statementStr, metadataType),
@@ -291,12 +301,12 @@ func GetRelations(article string, metadataType string, thresh float64) ([]string
 		return nil, err
 	}
 
-	ret := make([]string, len(result))
-	for i := range result {
-		ret[i] = result[i].Identifier
-	}
+	//ret := make([]string, len(result))
+	//for i := range result {
+	//		ret[i] = result[i].Identifier
+	//	}
 
-	return ret, nil
+	return result, nil
 
 }
 
